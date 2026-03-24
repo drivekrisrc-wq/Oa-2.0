@@ -1,5 +1,4 @@
-﻿
-  :root {
+:root {
     --navy: #002b66;
     --navy-dark: #002e6d;
     --navy-mid: #1a3d72;
@@ -107,15 +106,15 @@
 .logo-container {
   background: white;
   border-radius: 16px;
-  padding: 20px 28px;
+  padding: 16px 24px;
   display: inline-flex;
   align-items: center;
-  gap: 14px;
+  justify-content: center;
   box-shadow: 0 8px 32px rgba(0,0,0,0.25);
 }
 
 .logo-img {
-  height: 52px;
+  height: 56px;
   width: auto;
   display: block;
 }
@@ -309,16 +308,30 @@
 .topbar-logo-mini {
   background: white;
   border-radius: 8px;
-  padding: 6px 9px;
-  font-family: 'Barlow Condensed', sans-serif;
-  font-weight: 800;
-  font-size: 14px;
-  color: var(--navy);
-  letter-spacing: 0.5px;
+  padding: 5px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .topbar-logo-mini img {
-  height: 20px;
+  height: 22px;
+  width: auto;
+  display: block;
+}
+
+/* Logo en topbar general (menú y otras pantallas) */
+.topbar-logo-img {
+  background: white;
+  border-radius: 8px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  height: 34px;
+}
+
+.topbar-logo-img img {
+  height: 22px;
   width: auto;
   display: block;
 }
@@ -1259,4 +1272,3 @@
     .topbar { padding: 12px 16px; }
     .filter-bar { padding: 10px 16px; }
   }
-
