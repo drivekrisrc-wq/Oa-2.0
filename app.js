@@ -335,7 +335,7 @@ function checkForm() {
 
 function guardarOA() {
   const now = new Date();
-  const nuevoFolio = 'OA-2026-' + String(folioCounter).padStart(4,'0');
+  const nuevoFolio = 'OA-' + String(folioCounter).padStart(4,'0');
   folioCounter++;
 
   const tipo = fState.inc;
