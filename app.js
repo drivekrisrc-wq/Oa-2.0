@@ -1,9 +1,8 @@
-﻿
-    function injectTemplates() {
+function injectTemplates() {
       const app = document.getElementById('app');
       if (!app) return false;
       if (app.children.length) return true;
-      const ids = ['bienvenida','menu','nuevo','pasados','detalle','toast'];
+      const ids = ['bienvenida','responsable','menu','nuevo','pasados','detalle','editar','toast'];
       const html = ids.map(id => {
         const t = document.getElementById('view-' + id);
         return t ? t.innerHTML.trim() : '';
@@ -16,7 +15,108 @@
       document.addEventListener('DOMContentLoaded', injectTemplates);
     }
 
-    // =================== PRIORIDADES ===================
+    // =================== RESPONSABLE ===================
+let inspectorActual = null;
+
+function selResponsable(siglas) {
+  inspectorActual = siglas;
+  showToast('<i class="bi bi-person-check-fill"></i> Inspector: ' + siglas);
+  goTo('screenResponsable', 'screenNuevo');
+  // Mostrar badge del inspector en el topbar de nueva OA
+  const sub = document.getElementById('nuevoFolioSub');
+  if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
+}
+
+// =================== EDITAR OA ===================
+let editState = { area: null, inc: null };
+
+function abrirEditar() {
+  if (!currentDetalle) return;
+  const r = currentDetalle;
+  document.getElementById('editarFolioSub').textContent = r.folio;
+
+  // Preseleccionar área actual
+  editState.area = r.area;
+  editState.inc = r.tipo;
+
+  setTimeout(() => {
+    // Marcar área seleccionada
+    document.querySelectorAll('#editAreaList .area-list-item').forEach(el => {
+      const name = el.querySelector('.ali-name')?.textContent;
+      if (name && (name === r.area || name.replace('—','-') === r.area.replace('—','-'))) {
+        el.classList.add('sel');
+      }
+    });
+    // Marcar incumplimiento seleccionado
+    document.querySelectorAll('#screenEditar .inc-item').forEach(el => {
+      if (el.querySelector('.inc-text')?.textContent === r.tipo) {
+        el.classList.add('sel');
+      }
+    });
+    // Rellenar notas
+    const notasEl = document.getElementById('editNotasTa');
+    if (notasEl) notasEl.value = r.notas || '';
+  }, 100);
+
+  goTo('screenDetalle', 'screenEditar');
+}
+
+function selEditArea(el, nombre) {
+  document.querySelectorAll('#editAreaList .area-list-item').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  editState.area = nombre;
+}
+
+function selEditInc(el, tipo) {
+  document.querySelectorAll('#screenEditar .inc-item').forEach(i => i.classList.remove('sel'));
+  el.classList.add('sel');
+  editState.inc = tipo;
+}
+
+function filterEditAreas(q) {
+  const query = q.toLowerCase().trim();
+  document.querySelectorAll('#editAreaList .area-list-item').forEach(item => {
+    const name = item.querySelector('.ali-name');
+    if (!name) return;
+    item.classList.toggle('hidden', !name.textContent.toLowerCase().includes(query));
+  });
+  document.querySelectorAll('#editAreaList .area-group-label').forEach(label => {
+    let next = label.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('area-group-label')) {
+      if (!next.classList.contains('hidden')) hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    label.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+function guardarEdicion() {
+  if (!currentDetalle) return;
+  const reg = registros.find(r => r.folio === currentDetalle.folio);
+  if (!reg) return;
+
+  const notasVal = document.getElementById('editNotasTa')?.value || '';
+  if (editState.area) reg.area = editState.area;
+  if (editState.inc) {
+    reg.tipo = editState.inc;
+    const prio = getPrioridad(editState.inc);
+    reg.nivel = prio.nivel;
+    reg.diasLimite = prio.diasLimite;
+  }
+  reg.notas = notasVal;
+
+  guardarEnStorage();
+  showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
+  currentDetalle = reg;
+
+  setTimeout(() => {
+    goTo('screenEditar', 'screenDetalle');
+    verDetalle(reg.folio);
+  }, 800);
+}
+
+// =================== PRIORIDADES ===================
     const PRIORIDADES = {
       'Incorrecta Segregación RP':          { nivel:'Alto',      diasLimite:1, color:'#DC2626', bg:'rgba(220,38,38,0.1)',   icon:'bi-circle-fill' },
       'Incorrecta Segregación RME':         { nivel:'Bajo',      diasLimite:4, color:'#16A34A', bg:'rgba(22,163,74,0.1)',   icon:'bi-recycle' },
@@ -165,36 +265,11 @@ updateClock(); setInterval(updateClock,1000);
 let fState = { area:null, inc:null, foto:false, fotos:[null,null,null,null,null] };
 
 function selArea(el, nombre) {
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('#areaList .area-list-item').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
   fState.area = nombre;
-  document.getElementById('areaOtrosWrap').style.display = 'none';
   document.getElementById('chk2').classList.add('on');
   document.getElementById('fc3').classList.remove('locked');
-  checkForm();
-}
-
-function selAreaOtros() {
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
-  document.getElementById('areaOtrosItem').classList.add('sel');
-  document.getElementById('areaOtrosWrap').style.display = 'block';
-  document.getElementById('areaOtrosInput').focus();
-  fState.area = null;
-  document.getElementById('chk2').classList.remove('on');
-  document.getElementById('fc3').classList.add('locked');
-  checkForm();
-}
-
-function updateAreaOtros(val) {
-  if (val.trim().length > 0) {
-    fState.area = val.trim();
-    document.getElementById('chk2').classList.add('on');
-    document.getElementById('fc3').classList.remove('locked');
-  } else {
-    fState.area = null;
-    document.getElementById('chk2').classList.remove('on');
-    document.getElementById('fc3').classList.add('locked');
-  }
   checkForm();
 }
 
@@ -343,6 +418,7 @@ function guardarOA() {
 
   const nuevo = {
     folio: nuevoFolio,
+    inspector: inspectorActual || '—',
     area: fState.area,
     tipo: tipo,
     nivel: prio.nivel,
@@ -371,8 +447,8 @@ function guardarOA() {
 
 function resetNuevo() {
   fState = {area:null,inc:null,foto:false,fotos:[null,null,null,null,null]};
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
-  document.querySelectorAll('.inc-item').forEach(i=>i.classList.remove('sel'));
+  document.querySelectorAll('#areaList .area-list-item').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('#fc3 .inc-item').forEach(i=>i.classList.remove('sel'));
   const pb = document.getElementById('prioBadge'); if(pb) pb.remove();
   for(let i=0;i<5;i++){
     document.getElementById('fotoImg'+i).src='';
@@ -382,8 +458,6 @@ function resetNuevo() {
   }
   document.getElementById('fotosCount').textContent='0';
   document.getElementById('notasTa').value='';
-  document.getElementById('areaOtrosWrap').style.display='none';
-  document.getElementById('areaOtrosInput').value='';
   document.getElementById('areaSearch').value='';
   filterAreas('');
   ['chk2','chk3','chk4','chk5'].forEach(id=>document.getElementById(id).classList.remove('on'));
@@ -443,7 +517,7 @@ function renderRegistros() {
           <div class="reg-meta-item"><i class="bi bi-calendar3"></i> Días: ${diasDesv}</div>
         </div>
       </div>
-      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" style="display:block" onclick="verDetalle('${r.folio}')">` : ''}
+      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" onclick="verDetalle('${r.folio}')">` : ''}
       <div class="reg-card-footer">
         <button class="btn-ver-detalle" onclick="verDetalle('${r.folio}')">Ver detalle →</button>
         <button class="btn-eliminar-oa" onclick="confirmarEliminar('${r.folio}', event)"><i class="bi bi-trash3"></i> Eliminar</button>
@@ -511,6 +585,10 @@ function verDetalle(folio) {
     : '<i class="bi bi-circle-fill" style="color:#6EE7B7"></i> Cerrada';
 
   document.getElementById('detalleInfo').innerHTML = `
+    <div class="detalle-row">
+      <span class="dr-key">Inspector</span>
+      <span class="dr-val">${r.inspector || '—'}</span>
+    </div>
     <div class="detalle-row">
       <span class="dr-key">Área</span>
       <span class="dr-val">${r.area}</span>
