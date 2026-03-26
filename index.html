@@ -544,6 +544,18 @@
       <div class="toast" id="toast"></div>
     </template>
 
+    <!-- VISOR DE IMAGEN -->
+    <div id="imgVisor" onclick="cerrarVisor()" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:12px">
+      <div style="position:absolute;top:16px;right:16px;color:white;font-size:28px;cursor:pointer;line-height:1;padding:8px" onclick="cerrarVisor()">✕</div>
+      <div style="position:absolute;top:16px;left:16px;color:rgba(255,255,255,0.6);font-size:13px;font-family:'Barlow',sans-serif" id="visorLabel">Foto 1</div>
+      <img id="visorImg" src="" alt="" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:8px;user-select:none">
+      <div style="display:flex;gap:16px;align-items:center">
+        <button onclick="visorNav(-1);event.stopPropagation()" style="background:rgba(255,255,255,0.15);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">‹</button>
+        <div id="visorDots" style="display:flex;gap:6px"></div>
+        <button onclick="visorNav(1);event.stopPropagation()" style="background:rgba(255,255,255,0.15);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">›</button>
+      </div>
+    </div>
+
     <script src="app.js" defer></script>
   </body>
 </html>
