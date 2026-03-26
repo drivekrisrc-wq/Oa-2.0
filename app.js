@@ -855,6 +855,138 @@ function generarPDF() {
   };
 }
 
+// =================== EXPORTAR EXCEL ===================
+function exportarExcel() {
+  if (!registros || registros.length === 0) {
+    showToast('<i class="bi bi-exclamation-triangle"></i> No hay OAs para exportar');
+    return;
+  }
+
+  // SheetJS (xlsx) - cargado dinámicamente
+  if (typeof XLSX === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = () => _generarExcel();
+    document.head.appendChild(script);
+  } else {
+    _generarExcel();
+  }
+}
+
+function _generarExcel() {
+  const wb = XLSX.utils.book_new();
+
+  // ============ HOJA: NIVEL DE ATENCIÓN (idéntica al original) ============
+  const nivelData = [
+    ['PRIORIDAD DE ATENCIÓN','Nivel','Días',null,'NIVELES','BAJO','MEDIO ','ALTO ','INMEDIATO'],
+    ['Incorrecta Segregación de Residuos RP','Alto',1,null,'DÍA DE CIERRE',4,2,1,0],
+    ['Incorrecta Segregación de Residuos RME','Bajo',4],
+    ['Incorrecto Almacenaje de Materiales','Medio',2],
+    ['Orden y Limpieza','Medio',2],
+    ['Movimiento de Residuos','Bajo',4],
+    ['Contaminación al Suelo (DERRAMES)','Inmediato',0],
+    ['Agotamiento de los Recursos (FUGAS)','Alto',1],
+    [],
+    ['Estatus'],
+    ['Abierto'],
+    ['Cerrado'],
+  ];
+  const wsNivel = XLSX.utils.aoa_to_sheet(nivelData);
+  wsNivel['!cols'] = [{wch:35},{wch:12},{wch:8},{wch:4},{wch:14},{wch:8},{wch:8},{wch:8},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsNivel, 'NIVEL DE ATENCIÓN');
+
+  // ============ HOJA: BITÁCORA — mismas columnas que el original ============
+  // A=FOLIO OA, B=Hora inicio, C=Hora finalización, D=Fecha, E=Correo electrónico,
+  // F=Columna1, G=SUPERINTENDENTE, H=RESPONSABLE, I=ÁREA, J=NUMERO DE PROYECTO,
+  // K=Área, L=Categorías, M=Nivel, N=Días, O=Comentario,
+  // P=Día Esperado de Cierre, Q=Dias Transcurridos, R=Hoy, S=Estatus, T= , U=Tiempo de Cierre
+
+  const headers = [
+    'FOLIO OA','Hora de inicio','Hora de finalización','Fecha',
+    'Correo electrónico','Columna1','SUPERINTENDENTE','RESPONSABLE',
+    'ÁREA ','NUMERO DE PROYECTO','Área','Categorías',
+    'Nivel','Días','Comentario Obligatoria "Se detecto ..."',
+    'Día Esperado de Cierre','Dias Transcurridos','Hoy',
+    'Estatus',' ','Tiempo de Cierre'
+  ];
+
+  const filas = [headers];
+
+  registros.forEach((r, i) => {
+    const rowNum = i + 2;
+    const prio = getPrioridad(r.tipo);
+
+    let horaInicio = '', horaFin = '', fechaStr = '';
+    let diaEsperado = '', diasTransc = '', hoy = '', fechaCierreStr = '', tiempoCierre = '';
+
+    if (r.fechaAperturaISO) {
+      const dt = new Date(r.fechaAperturaISO);
+      horaInicio = dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      horaFin    = horaInicio;
+      fechaStr   = dt.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const diasLim = r.diasLimite ?? prio.diasLimite ?? 0;
+      const limite = new Date(dt);
+      limite.setDate(limite.getDate() + diasLim);
+      diaEsperado = limite.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const fin = r.fechaCierreISO ? new Date(r.fechaCierreISO) : new Date();
+      diasTransc  = Math.floor((fin - dt)/(1000*60*60*24));
+      hoy         = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+    }
+
+    if (r.fechaCierreISO) {
+      const dc = new Date(r.fechaCierreISO);
+      fechaCierreStr = dc.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      if (r.fechaAperturaISO) {
+        const da = new Date(r.fechaAperturaISO);
+        tiempoCierre = Math.floor((dc - da)/(1000*60*60*24));
+      }
+    }
+
+    filas.push([
+      r.folio || '',          // A - FOLIO OA
+      horaInicio,             // B - Hora de inicio
+      horaFin,                // C - Hora de finalización
+      fechaStr,               // D - Fecha
+      r.inspector || '—',    // E - Correo electrónico (inspector)
+      '',                     // F - Columna1
+      '—',                    // G - SUPERINTENDENTE
+      '—',                    // H - RESPONSABLE
+      r.area || '',           // I - ÁREA
+      '—',                    // J - NUMERO DE PROYECTO
+      '—',                    // K - Área funcional
+      r.tipo || '',           // L - Categorías
+      prio.nivel || '—',      // M - Nivel
+      r.diasLimite ?? prio.diasLimite ?? '—',  // N - Días
+      r.notas || '',          // O - Comentario
+      diaEsperado,            // P - Día Esperado de Cierre
+      diasTransc,             // Q - Dias Transcurridos
+      hoy,                    // R - Hoy
+      r.estatus === 'cerrada' ? 'Cerrado' : 'Abierto',  // S - Estatus
+      fechaCierreStr,         // T - (espacio = fecha cierre real)
+      tiempoCierre,           // U - Tiempo de Cierre
+    ]);
+  });
+
+  const wsBit = XLSX.utils.aoa_to_sheet(filas);
+
+  // Anchos exactos del original
+  wsBit['!cols'] = [
+    {wch:11.66},{wch:16},{wch:20.88},{wch:20.88},{wch:19.88},{wch:19.88},
+    {wch:23.10},{wch:20},{wch:23.10},{wch:18.33},{wch:13},{wch:34},
+    {wch:13},{wch:12.55},{wch:32.10},{wch:16.33},{wch:13.33},{wch:11.10},
+    {wch:16.33},{wch:11.44},{wch:15.44}
+  ];
+
+  // Freeze fila 1
+  wsBit['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+
+  XLSX.utils.book_append_sheet(wb, wsBit, 'Bitacora');
+
+  const fecha = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  XLSX.writeFile(wb, `Bitacora_OA_TNG_${fecha}.xlsx`);
+  showToast('<i class="bi bi-file-earmark-excel"></i> Bitácora exportada correctamente');
+}
+
 // =================== TOAST ===================
 function showToast(msg) {
   const t = document.getElementById('toast');
