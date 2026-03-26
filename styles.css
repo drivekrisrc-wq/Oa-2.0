@@ -106,15 +106,16 @@
 .logo-container {
   background: white;
   border-radius: 16px;
-  padding: 20px 28px;
+  padding: 18px 28px;
   display: inline-flex;
   align-items: center;
-  gap: 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.2);
 }
 
 .logo-img {
-  height: 52px;
+  height: 56px;
   width: auto;
   display: block;
 }
