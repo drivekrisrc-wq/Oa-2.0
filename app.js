@@ -15,7 +15,47 @@ function injectTemplates() {
       document.addEventListener('DOMContentLoaded', injectTemplates);
     }
 
-    // =================== RESPONSABLE ===================
+    // =================== VISOR DE IMAGEN ===================
+let visorFotos = [];
+let visorIndex = 0;
+
+function abrirVisor(fotos, index) {
+  visorFotos = fotos;
+  visorIndex = index;
+  const visor = document.getElementById('imgVisor');
+  visor.style.display = 'flex';
+  actualizarVisor();
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarVisor() {
+  document.getElementById('imgVisor').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function visorNav(dir) {
+  visorIndex = (visorIndex + dir + visorFotos.length) % visorFotos.length;
+  actualizarVisor();
+  event.stopPropagation();
+}
+
+function actualizarVisor() {
+  document.getElementById('visorImg').src = visorFotos[visorIndex];
+  document.getElementById('visorLabel').textContent = `Foto ${visorIndex + 1} de ${visorFotos.length}`;
+  const dots = document.getElementById('visorDots');
+  dots.innerHTML = visorFotos.map((_, i) => `
+    <div onclick="visorIndex=${i};actualizarVisor();event.stopPropagation()" style="width:8px;height:8px;border-radius:50%;background:${i===visorIndex?'white':'rgba(255,255,255,0.35)'};cursor:pointer;transition:background 0.2s"></div>
+  `).join('');
+}
+
+// Cerrar con tecla Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') cerrarVisor();
+  if (e.key === 'ArrowLeft') { if(visorFotos.length>1){visorIndex=(visorIndex-1+visorFotos.length)%visorFotos.length;actualizarVisor();} }
+  if (e.key === 'ArrowRight') { if(visorFotos.length>1){visorIndex=(visorIndex+1)%visorFotos.length;actualizarVisor();} }
+});
+
+// =================== RESPONSABLE ===================
 let inspectorActual = null;
 
 function selResponsable(siglas) {
@@ -517,7 +557,7 @@ function renderRegistros() {
           <div class="reg-meta-item"><i class="bi bi-calendar3"></i> Días: ${diasDesv}</div>
         </div>
       </div>
-      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" onclick="verDetalle('${r.folio}')">` : ''}
+      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" onclick="abrirVisor(${JSON.stringify(r.fotos && r.fotos.length ? r.fotos : [r.foto])},0)" style="cursor:zoom-in">` : ''}
       <div class="reg-card-footer">
         <button class="btn-ver-detalle" onclick="verDetalle('${r.folio}')">Ver detalle →</button>
         <button class="btn-eliminar-oa" onclick="confirmarEliminar('${r.folio}', event)"><i class="bi bi-trash3"></i> Eliminar</button>
@@ -631,9 +671,10 @@ function verDetalle(folio) {
   if (fotos.length) {
     fotoCard.style.display='block';
     fotosBody.innerHTML = fotos.map((src,i) => `
-      <div style="position:relative">
-        <img src="${src}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block">
+      <div style="position:relative;cursor:zoom-in" onclick="abrirVisor(${JSON.stringify(fotos)},${i})">
+        <img src="${src}" style="width:100%;border-radius:10px;object-fit:contain;max-height:280px;background:#f8f9fb;display:block">
         <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;backdrop-filter:blur(4px)">Foto ${i+1}</div>
+        <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.5);color:white;font-size:11px;padding:3px 8px;border-radius:10px;backdrop-filter:blur(4px)"><i class="bi bi-zoom-in"></i></div>
       </div>
     `).join('');
   } else {
