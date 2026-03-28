@@ -48,11 +48,15 @@
       <div class="screen" id="screenMenu">
     <div class="topbar">
       <div class="topbar-info" style="display:flex;align-items:center;gap:10px">
-        <img src="hutchison-logo.png" alt="Hutchison Ports" style="height:22px;width:auto;display:block">
-        <div class="topbar-title">Hutchison Ports TNG</div>
-        <div class="topbar-sub">Sistema de Observaciones Ambientales</div>
+        <div style="background:white;border-radius:8px;padding:5px 10px;display:flex;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,0.2);flex-shrink:0">
+          <img src="hutchison-logo.png" alt="Hutchison Ports" style="height:22px;width:auto;display:block">
+        </div>
+        <div>
+          <div class="topbar-title">Hutchison Ports TNG</div>
+          <div class="topbar-sub">Sistema de Observaciones Ambientales</div>
+        </div>
       </div>
-           <div class="topbar-logo-mini">TNG</div>
+      <div class="topbar-logo-mini">TNG</div>
         </div>
 
         <div class="menu-hero">
@@ -73,13 +77,13 @@
                 <div class="stat-label">Total 2026</div>
               </div>
             </div>
-            <!-- Indicador de sincronización -->
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;background:rgba(255,255,255,0.07);border-radius:10px;padding:10px 14px">
-              <div id="syncStatus" style="display:flex;align-items:center;gap:8px">
-                <i class="bi bi-cloud-slash-fill" style="color:#6B7B9A;font-size:14px"></i>
-                <span style="font-size:11px;color:rgba(255,255,255,0.45)">Verificando conexión...</span>
+            <!-- Barra de sincronización -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px;background:rgba(255,255,255,0.07);border-radius:10px;padding:9px 14px;">
+              <div id="syncStatus" style="display:flex;align-items:center;gap:8px;">
+                <i class="bi bi-cloud-arrow-up-fill" style="color:#D97706;font-size:14px"></i>
+                <span style="font-size:11px;color:#D97706;font-weight:600">Verificando...</span>
               </div>
-              <button onclick="sincronizarNube()" style="background:rgba(255,255,255,0.12);border:none;color:white;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px">
+              <button onclick="sincronizarNube()" style="background:rgba(255,255,255,0.12);border:1px solid rgba(255,255,255,0.15);color:white;font-size:11px;font-weight:600;padding:5px 12px;border-radius:20px;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;gap:5px;">
                 <i class="bi bi-arrow-clockwise"></i> Sincronizar
               </button>
             </div>
@@ -89,7 +93,7 @@
         <div class="menu-options">
           <div class="menu-section-label">Acciones</div>
 
-          <div class="menu-card" onclick="goTo('screenMenu','screenNuevo')">
+          <div class="menu-card" onclick="goTo('screenMenu','screenResponsable')">
             <div class="menu-card-icon nuevo"><span class="ali-icon"><i class="bi bi-plus" style="color: white;"></i></span></div>
             <div class="menu-card-text">
               <div class="menu-card-title">Nuevo Registro</div>
@@ -106,6 +110,156 @@
             </div>
             <div class="menu-card-arrow"></div>
           </div>
+
+          <div class="menu-card" onclick="exportarExcel()">
+            <div class="menu-card-icon" style="background:linear-gradient(135deg,#1D6F42,#107C41)"><i class="bi bi-file-earmark-excel-fill" style="color:white;font-size:22px"></i></div>
+            <div class="menu-card-text">
+              <div class="menu-card-title">Exportar Bitácora</div>
+              <div class="menu-card-desc">Descarga Excel con todas las OAs registradas</div>
+            </div>
+            <div class="menu-card-arrow"></div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ====== SCREEN RESPONSABLE ====== -->
+    <template id="view-responsable">
+      <div class="screen" id="screenResponsable">
+        <div class="topbar">
+          <button class="topbar-back" onclick="goBack('screenResponsable','screenMenu')"><span class="ali-icon"><i class="bi bi-arrow-left" style="color:white;"></i></span></button>
+          <div class="topbar-info">
+            <div class="topbar-title">¿Quién registra?</div>
+            <div class="topbar-sub">Selecciona tu identificador</div>
+          </div>
+          <div class="topbar-logo-mini">TNG</div>
+        </div>
+        <div class="responsable-content">
+          <div class="responsable-desc">Selecciona las siglas del inspector que está levantando esta observación ambiental.</div>
+          <div class="responsable-list">
+            <div class="responsable-item" onclick="selResponsable('DMI')">
+              <div class="resp-siglas">DMI</div>
+              <div class="resp-arrow"><i class="bi bi-chevron-right"></i></div>
+            </div>
+            <div class="responsable-item" onclick="selResponsable('ARL')">
+              <div class="resp-siglas">ARL</div>
+              <div class="resp-arrow"><i class="bi bi-chevron-right"></i></div>
+            </div>
+            <div class="responsable-item" onclick="selResponsable('EBG')">
+              <div class="resp-siglas">EBG</div>
+              <div class="resp-arrow"><i class="bi bi-chevron-right"></i></div>
+            </div>
+            <div class="responsable-item" onclick="selResponsable('KRC')">
+              <div class="resp-siglas">KRC</div>
+              <div class="resp-arrow"><i class="bi bi-chevron-right"></i></div>
+            </div>
+            <div class="responsable-item" onclick="selResponsable('CR')">
+              <div class="resp-siglas">CR</div>
+              <div class="resp-arrow"><i class="bi bi-chevron-right"></i></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </template>
+
+    <!-- ====== SCREEN EDITAR OA ====== -->
+    <template id="view-editar">
+      <div class="screen" id="screenEditar">
+        <div class="topbar">
+          <button class="topbar-back" onclick="goBack('screenEditar','screenDetalle')"><span class="ali-icon"><i class="bi bi-arrow-left" style="color:white;"></i></span></button>
+          <div class="topbar-info">
+            <div class="topbar-title">Editar OA</div>
+            <div class="topbar-sub" id="editarFolioSub">—</div>
+          </div>
+          <div class="topbar-logo-mini">TNG</div>
+        </div>
+        <div class="form-content">
+
+          <!-- Área -->
+          <div class="fcard" id="efc2">
+            <div class="fcard-head">
+              <div class="fcard-icon navy"><i class="bi bi-geo-alt-fill" style="color:#002b66"></i></div>
+              <div class="fcard-title">Área de Observación</div>
+              <div class="fcard-check on" id="echk2"><i class="bi bi-check-lg"></i></div>
+            </div>
+            <div class="fcard-body">
+              <div class="area-search-wrap">
+                <input type="text" class="area-search" id="editAreaSearch" placeholder="🔍  Buscar área..." oninput="filterEditAreas(this.value)">
+              </div>
+              <div class="area-list" id="editAreaList">
+                <div class="area-group-label">Diques y Muelles</div>
+                <div class="area-list-item" onclick="selEditArea(this,'Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Plan de Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 2</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Muelle de Reparaciones')"><span class="ali-icon"><i class="fa-solid fa-gear" style="color:#002b66"></i></span><span class="ali-name">Muelle de Reparaciones</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Plan de Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 5</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Muelle de Alistamiento')"><span class="ali-icon"><i class="fa-solid fa-ship" style="color:#002b66"></i></span><span class="ali-name">Muelle de Alistamiento</span></div>
+                <div class="area-group-label">Naves</div>
+                <div class="area-list-item" onclick="selEditArea(this,'Nave A - Elaboración')"><span class="ali-icon"><i class="fa-solid fa-building" style="color:#002b66"></i></span><span class="ali-name">Nave A — Elaboración</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Nave B - Elaboración')"><span class="ali-icon"><i class="fa-solid fa-building" style="color:#002b66"></i></span><span class="ali-name">Nave B — Elaboración</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Nave B - Pipe Mill')"><span class="ali-icon"><i class="fa-solid fa-building" style="color:#002b66"></i></span><span class="ali-name">Nave B — Pipe Mill</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Nave C - Ensamble')"><span class="ali-icon"><i class="fa-solid fa-building" style="color:#002b66"></i></span><span class="ali-name">Nave C — Ensamble</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Nave D - Ensamble')"><span class="ali-icon"><i class="fa-solid fa-building" style="color:#002b66"></i></span><span class="ali-name">Nave D — Ensamble</span></div>
+                <div class="area-group-label">Talleres</div>
+                <div class="area-list-item" onclick="selEditArea(this,'Pañol Central')"><span class="ali-icon"><i class="fa-solid fa-box" style="color:#002b66"></i></span><span class="ali-name">Pañol Central</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Carpintería')"><span class="ali-icon"><i class="fa-solid fa-hammer" style="color:#002b66"></i></span><span class="ali-name">Taller de Carpintería</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Maniobras')"><span class="ali-icon"><i class="fa-solid fa-briefcase" style="color:#002b66"></i></span><span class="ali-name">Taller de Maniobras</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Mantenimiento Automotriz (Nave D)')"><span class="ali-icon"><i class="fa-solid fa-car-rear" style="color:#002b66"></i></span><span class="ali-name">Taller Mantenimiento Automotriz</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Mantenimiento Eléctrico')"><span class="ali-icon"><i class="fa-solid fa-bolt" style="color:#002b66"></i></span><span class="ali-name">Taller Mantenimiento Eléctrico</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Mantenimiento Mecánico')"><span class="ali-icon"><i class="fa-solid fa-wrench" style="color:#002b66"></i></span><span class="ali-name">Taller Mantenimiento Mecánico</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Mantenimiento Naval')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Taller Mantenimiento Naval</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Maquinado')"><span class="ali-icon"><i class="fa-solid fa-gear" style="color:#002b66"></i></span><span class="ali-name">Taller de Maquinado</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Servicios')"><span class="ali-icon"><i class="bi bi-tools" style="color:#002b66"></i></span><span class="ali-name">Taller de Servicios</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Taller de Tuberos')"><span class="ali-icon"><i class="bi bi-gear-fill" style="color:#002b66"></i></span><span class="ali-name">Taller de Tuberos</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Infraestructura')"><span class="ali-icon"><i class="bi bi-building" style="color:#002b66"></i></span><span class="ali-name">Infraestructura</span></div>
+                <div class="area-group-label">Zonas Especiales</div>
+                <div class="area-list-item" onclick="selEditArea(this,'Casa de la Risa')"><span class="ali-icon"><i class="bi bi-house-fill" style="color:#002b66"></i></span><span class="ali-name">Casa de la Risa</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Zona de Abrasivo Usado')"><span class="ali-icon"><i class="bi bi-bricks" style="color:#002b66"></i></span><span class="ali-name">Zona de Abrasivo Usado</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Zona de Chatarra')"><span class="ali-icon"><i class="bi bi-recycle" style="color:#002b66"></i></span><span class="ali-name">Zona de Chatarra</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Zona de Escombro')"><span class="ali-icon"><i class="bi bi-bricks" style="color:#002b66"></i></span><span class="ali-name">Zona de Escombro</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Zona de Madera')"><span class="ali-icon"><i class="bi bi-tree-fill" style="color:#002b66"></i></span><span class="ali-name">Zona de Madera</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Zona de Sandblast y Pintura')"><span class="ali-icon"><i class="bi bi-palette-fill" style="color:#002b66"></i></span><span class="ali-name">Zona de Sandblast y Pintura</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Área de Construcción')"><span class="ali-icon"><i class="bi bi-cone-striped" style="color:#002b66"></i></span><span class="ali-name">Área de Construcción</span></div>
+                <div class="area-list-item" onclick="selEditArea(this,'Área de Reparación de Grúas JC')"><span class="ali-icon"><i class="bi bi-cone-striped" style="color:#002b66"></i></span><span class="ali-name">Área de Reparación de Grúas JC</span></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Incumplimiento -->
+          <div class="fcard" id="efc3">
+            <div class="fcard-head">
+              <div class="fcard-icon blue"><i class="bi bi-exclamation-triangle-fill"></i></div>
+              <div class="fcard-title">Tipo de Incumplimiento</div>
+              <div class="fcard-check on" id="echk3"><i class="bi bi-check-lg"></i></div>
+            </div>
+            <div class="fcard-body">
+              <div class="inc-list">
+                <div class="inc-item" onclick="selEditInc(this,'Incorrecta Segregación RP')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-circle-fill" style="color:#002b66"></i></div><div class="inc-text">Incorrecta Segregación RP</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Incorrecta Segregación RME')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-recycle" style="color:#002b66"></i></div><div class="inc-text">Incorrecta Segregación RME</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Incorrecto Almacenaje de Materiales')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-box-seam" style="color:#002b66"></i></div><div class="inc-text">Incorrecto Almacenaje de Materiales</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Orden y Limpieza')"><div class="inc-radio"></div><div class="inc-emoji"><i class="fa-solid fa-broom" style="color:#002b66"></i></div><div class="inc-text">Orden y Limpieza</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Movimiento de Residuos')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-truck" style="color:#002b66"></i></div><div class="inc-text">Movimiento de Residuos</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Contaminación al Suelo — DERRAME')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-droplet-fill" style="color:#002b66"></i></div><div class="inc-text">Contaminación al Suelo — DERRAME</div></div>
+                <div class="inc-item" onclick="selEditInc(this,'Agotamiento de Recursos — FUGA')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-wind" style="color:#002b66"></i></div><div class="inc-text">Agotamiento de Recursos — FUGA</div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Notas -->
+          <div class="fcard" id="efc5">
+            <div class="fcard-head">
+              <div class="fcard-icon blue"><i class="bi bi-journal-text"></i></div>
+              <div class="fcard-title">Notas</div>
+            </div>
+            <div class="fcard-body">
+              <textarea class="notas-ta" id="editNotasTa" placeholder="Describe brevemente el incumplimiento..." maxlength="300"></textarea>
+            </div>
+          </div>
+
+          <button class="btn-guardar" id="btnGuardarEdicion" onclick="guardarEdicion()" style="margin:0 0 20px">
+            <i class="bi bi-floppy"></i> Guardar Cambios
+          </button>
+
         </div>
       </div>
     </template>
@@ -181,6 +335,7 @@
                 <div class="area-list-item" onclick="selArea(this,'Taller de Maquinado')"><span class="ali-icon"><i class="fa-solid fa-gear" style="color:#002b66"></i></span><span class="ali-name">Taller de Maquinado</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Taller de Servicios')"><span class="ali-icon"><i class="bi bi-tools" style="color:#002b66"></i></span><span class="ali-name">Taller de Servicios</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Taller de Tuberos')"><span class="ali-icon"><i class="bi bi-gear-fill" style="color:#002b66"></i></span><span class="ali-name">Taller de Tuberos</span></div>
+                <div class="area-list-item" onclick="selArea(this,'Infraestructura')"><span class="ali-icon"><i class="bi bi-building" style="color:#002b66"></i></span><span class="ali-name">Infraestructura</span></div>
 
                 <div class="area-group-label">Zonas Especiales</div>
                 <div class="area-list-item" onclick="selArea(this,'Casa de la Risa')"><span class="ali-icon"><i class="bi bi-house-fill" style="color:#002b66"></i></span><span class="ali-name">Casa de la Risa</span></div>
@@ -192,14 +347,6 @@
                 <div class="area-list-item" onclick="selArea(this,'Área de Construcción')"><span class="ali-icon"><i class="bi bi-cone-striped" style="color:#002b66"></i></span><span class="ali-name">Área de Construcción</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Área de Reparación de Grúas JC')"><span class="ali-icon"><i class="bi bi-cone-striped" style="color:#002b66"></i></span><span class="ali-name">Área de Reparación de Grúas JC</span></div>
 
-                <div class="area-group-label">Otro</div>
-                <div class="area-list-item area-otros" id="areaOtrosItem" onclick="selAreaOtros()">
-                  <span class="ali-icon"><i class="bi bi-pencil" style="color:#002b66"></i></span>
-                  <span class="ali-name" >Otros — especificar</span>
-                </div>
-              </div>
-              <div id="areaOtrosWrap" style="display:none;margin-top:10px;">
-                <input type="text" class="area-search" id="areaOtrosInput" placeholder="Escribe el nombre del área..." oninput="updateAreaOtros(this.value)" style="border-color:var(--blue)">
               </div>
             </div>
           </div>
@@ -406,6 +553,11 @@
             <span style="font-size:18px"><i class="bi bi-file-earmark-pdf"></i></span> Descargar PDF
           </button>
 
+          <!-- Editar OA -->
+          <button class="btn-editar" onclick="abrirEditar()">
+            <span style="font-size:18px"><i class="bi bi-pencil-square"></i></span> Editar OA
+          </button>
+
         </div>
       </div>
     </template>
@@ -414,6 +566,18 @@
     <template id="view-toast">
       <div class="toast" id="toast"></div>
     </template>
+
+    <!-- VISOR DE IMAGEN -->
+    <div id="imgVisor" onclick="cerrarVisor()" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,0.92);align-items:center;justify-content:center;flex-direction:column;gap:12px">
+      <div style="position:absolute;top:16px;right:16px;color:white;font-size:28px;cursor:pointer;line-height:1;padding:8px" onclick="cerrarVisor()">✕</div>
+      <div style="position:absolute;top:16px;left:16px;color:rgba(255,255,255,0.6);font-size:13px;font-family:'Barlow',sans-serif" id="visorLabel">Foto 1</div>
+      <img id="visorImg" src="" alt="" style="max-width:95vw;max-height:85vh;object-fit:contain;border-radius:8px;user-select:none">
+      <div style="display:flex;gap:16px;align-items:center">
+        <button onclick="visorNav(-1);event.stopPropagation()" style="background:rgba(255,255,255,0.15);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">‹</button>
+        <div id="visorDots" style="display:flex;gap:6px"></div>
+        <button onclick="visorNav(1);event.stopPropagation()" style="background:rgba(255,255,255,0.15);border:none;color:white;width:40px;height:40px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center">›</button>
+      </div>
+    </div>
 
     <script src="app.js" defer></script>
   </body>
