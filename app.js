@@ -784,7 +784,11 @@ async function sincronizarNube() {
 async function cargarDesdeNube() {
   mostrarSyncStatus('syncing');
   try {
-    const resp = await fetch(SHEETS_URL + '?action=get');
+    const resp = await fetch(SHEETS_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'get' })
+    });
+
     const data = await resp.json();
 
     if (data.status === 'ok' && data.registros && data.registros.length > 0) {
@@ -796,16 +800,16 @@ async function cargarDesdeNube() {
       // Migración de campos faltantes
       registros = registros.map(r => {
         if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
-        if (r.fechaCierreISO === undefined) r.fechaCierreISO = null;
+        if (r.fechaCierreISO === undefined || r.fechaCierreISO === '') r.fechaCierreISO = null;
+        if (!r.fotos) r.fotos = [];
+        if (!r.foto) r.foto = '';
         return r;
       });
 
-      // Actualizar folio counter
-      const maxFolio = registros.reduce((max, r) => {
-        const num = parseInt((r.folio || '0').replace(/\D/g,''));
-        return num > max ? num : max;
-      }, folioCounter);
-      folioCounter = maxFolio + 1;
+      // Actualizar folio counter desde la nube
+      if (data.folioCounter && data.folioCounter > folioCounter) {
+        folioCounter = parseInt(data.folioCounter) + 1;
+      }
 
       await guardarEnStorage();
       updateStats();
@@ -817,6 +821,7 @@ async function cargarDesdeNube() {
       return false;
     }
   } catch(e) {
+    console.warn('Sin conexión a la nube:', e);
     mostrarSyncStatus('offline');
     return false;
   }
