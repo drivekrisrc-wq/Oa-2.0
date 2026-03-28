@@ -2,7 +2,7 @@ function injectTemplates() {
       const app = document.getElementById('app');
       if (!app) return false;
       if (app.children.length) return true;
-      const ids = ['bienvenida','menu','nuevo','pasados','detalle','toast'];
+      const ids = ['bienvenida','responsable','menu','nuevo','pasados','detalle','editar','toast'];
       const html = ids.map(id => {
         const t = document.getElementById('view-' + id);
         return t ? t.innerHTML.trim() : '';
@@ -15,7 +15,254 @@ function injectTemplates() {
       document.addEventListener('DOMContentLoaded', injectTemplates);
     }
 
-    // =================== PRIORIDADES ===================
+    // =================== VISOR DE IMAGEN ===================
+let visorFotos = [];
+let visorIndex = 0;
+
+function abrirVisor(fotos, index) {
+  visorFotos = fotos;
+  visorIndex = index;
+  const visor = document.getElementById('imgVisor');
+  visor.style.display = 'flex';
+  actualizarVisor();
+  document.body.style.overflow = 'hidden';
+}
+
+function cerrarVisor() {
+  document.getElementById('imgVisor').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function visorNav(dir) {
+  visorIndex = (visorIndex + dir + visorFotos.length) % visorFotos.length;
+  actualizarVisor();
+  event.stopPropagation();
+}
+
+function actualizarVisor() {
+  document.getElementById('visorImg').src = visorFotos[visorIndex];
+  document.getElementById('visorLabel').textContent = `Foto ${visorIndex + 1} de ${visorFotos.length}`;
+  const dots = document.getElementById('visorDots');
+  dots.innerHTML = visorFotos.map((_, i) => `
+    <div onclick="visorIndex=${i};actualizarVisor();event.stopPropagation()" style="width:8px;height:8px;border-radius:50%;background:${i===visorIndex?'white':'rgba(255,255,255,0.35)'};cursor:pointer;transition:background 0.2s"></div>
+  `).join('');
+}
+
+// Cerrar con tecla Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') cerrarVisor();
+  if (e.key === 'ArrowLeft') { if(visorFotos.length>1){visorIndex=(visorIndex-1+visorFotos.length)%visorFotos.length;actualizarVisor();} }
+  if (e.key === 'ArrowRight') { if(visorFotos.length>1){visorIndex=(visorIndex+1)%visorFotos.length;actualizarVisor();} }
+});
+
+// =================== RESPONSABLE ===================
+let inspectorActual = null;
+
+function selResponsable(siglas) {
+  inspectorActual = siglas;
+  showToast('<i class="bi bi-person-check-fill"></i> Inspector: ' + siglas);
+  goTo('screenResponsable', 'screenNuevo');
+  // Mostrar badge del inspector en el topbar de nueva OA
+  const sub = document.getElementById('nuevoFolioSub');
+  if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
+}
+
+// =================== EDITAR OA ===================
+let editState = { area: null, inc: null };
+
+function abrirEditar() {
+  if (!currentDetalle) return;
+  const r = currentDetalle;
+  document.getElementById('editarFolioSub').textContent = r.folio;
+
+  // Preseleccionar área actual
+  editState.area = r.area;
+  editState.inc = r.tipo;
+
+  setTimeout(() => {
+    // Marcar área seleccionada
+    document.querySelectorAll('#editAreaList .area-list-item').forEach(el => {
+      const name = el.querySelector('.ali-name')?.textContent;
+      if (name && (name === r.area || name.replace('—','-') === r.area.replace('—','-'))) {
+        el.classList.add('sel');
+      }
+    });
+    // Marcar incumplimiento seleccionado
+    document.querySelectorAll('#screenEditar .inc-item').forEach(el => {
+      if (el.querySelector('.inc-text')?.textContent === r.tipo) {
+        el.classList.add('sel');
+      }
+    });
+    // Rellenar notas
+    const notasEl = document.getElementById('editNotasTa');
+    if (notasEl) notasEl.value = r.notas || '';
+  }, 100);
+
+  goTo('screenDetalle', 'screenEditar');
+}
+
+function selEditArea(el, nombre) {
+  document.querySelectorAll('#editAreaList .area-list-item').forEach(b => b.classList.remove('sel'));
+  el.classList.add('sel');
+  editState.area = nombre;
+}
+
+function selEditInc(el, tipo) {
+  document.querySelectorAll('#screenEditar .inc-item').forEach(i => i.classList.remove('sel'));
+  el.classList.add('sel');
+  editState.inc = tipo;
+}
+
+function filterEditAreas(q) {
+  const query = q.toLowerCase().trim();
+  document.querySelectorAll('#editAreaList .area-list-item').forEach(item => {
+    const name = item.querySelector('.ali-name');
+    if (!name) return;
+    item.classList.toggle('hidden', !name.textContent.toLowerCase().includes(query));
+  });
+  document.querySelectorAll('#editAreaList .area-group-label').forEach(label => {
+    let next = label.nextElementSibling;
+    let hasVisible = false;
+    while (next && !next.classList.contains('area-group-label')) {
+      if (!next.classList.contains('hidden')) hasVisible = true;
+      next = next.nextElementSibling;
+    }
+    label.style.display = hasVisible ? '' : 'none';
+  });
+}
+
+function guardarEdicion() {
+  if (!currentDetalle) return;
+  const reg = registros.find(r => r.folio === currentDetalle.folio);
+  if (!reg) return;
+
+  const notasVal = document.getElementById('editNotasTa')?.value || '';
+  if (editState.area) reg.area = editState.area;
+  if (editState.inc) {
+    reg.tipo = editState.inc;
+    const prio = getPrioridad(editState.inc);
+    reg.nivel = prio.nivel;
+    reg.diasLimite = prio.diasLimite;
+  }
+  reg.notas = notasVal;
+
+  guardarEnStorage();
+  sincronizarNube();
+  showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
+  currentDetalle = reg;
+
+  setTimeout(() => {
+    goTo('screenEditar', 'screenDetalle');
+    verDetalle(reg.folio);
+  }, 800);
+}
+
+// =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TEv7hF5ts4cVQoT9eBzcGI2uvFOcwMRW3PMwBS0mHG9auyA8XPMWfgtxnkAw3RkL/exec';
+const SYNC_KEY = 'tng_last_sync';
+let sincronizando = false;
+
+async function sincronizarNube() {
+  if (sincronizando) return;
+  sincronizando = true;
+  mostrarSyncStatus('syncing');
+  try {
+    await fetch(SHEETS_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({
+        action: 'sync',
+        registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
+        folioCounter
+      })
+    });
+    localStorage.setItem(SYNC_KEY, new Date().toISOString());
+    mostrarSyncStatus('ok');
+    showToast('<i class="bi bi-cloud-check-fill"></i> Datos enviados a la nube');
+  } catch(e) {
+    mostrarSyncStatus('error');
+    showToast('<i class="bi bi-cloud-slash-fill"></i> Sin conexión — guardado localmente');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+function cargarDesdeNube() {
+  return new Promise(resolve => {
+    mostrarSyncStatus('syncing');
+    const cbName = 'oaCb_' + Date.now();
+    const script = document.createElement('script');
+    let done = false;
+
+    const timer = setTimeout(() => {
+      if (!done) { done = true; cleanup(); mostrarSyncStatus('offline'); resolve(false); }
+    }, 8000);
+
+    window[cbName] = function(data) {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      cleanup();
+      try {
+        if (data.status === 'ok' && data.registros && data.registros.length > 0) {
+          const foliosNube = new Set(data.registros.map(r => r.folio));
+          const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
+          registros = [...data.registros, ...soloLocales].map(r => {
+            if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
+            if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
+            if (!r.fotos) r.fotos = [];
+            if (!r.foto)  r.foto  = '';
+            if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
+            return r;
+          });
+          if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
+            folioCounter = parseInt(data.folioCounter) + 1;
+          guardarEnStorage();
+          updateStats();
+          localStorage.setItem(SYNC_KEY, new Date().toISOString());
+          mostrarSyncStatus('ok');
+          resolve(true);
+        } else {
+          mostrarSyncStatus('ok');
+          resolve(false);
+        }
+      } catch(e) { mostrarSyncStatus('error'); resolve(false); }
+    };
+
+    function cleanup() {
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete window[cbName];
+    }
+
+    script.onerror = () => {
+      if (!done) { done = true; clearTimeout(timer); cleanup(); mostrarSyncStatus('offline'); resolve(false); }
+    };
+    script.src = SHEETS_URL + '?callback=' + cbName + '&t=' + Date.now();
+    document.head.appendChild(script);
+  });
+}
+
+function mostrarSyncStatus(estado) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const map = {
+    syncing: { icon: 'bi-cloud-arrow-up-fill', color: '#D97706', text: 'Sincronizando...' },
+    ok:      { icon: 'bi-cloud-check-fill',    color: '#6EE7B7', text: 'Sincronizado'    },
+    error:   { icon: 'bi-cloud-slash-fill',    color: '#F87171', text: 'Sin conexión'    },
+    offline: { icon: 'bi-cloud-slash-fill',    color: '#9CA3AF', text: 'Sin conexión'    },
+  };
+  const s = map[estado] || map.offline;
+  const last = localStorage.getItem(SYNC_KEY);
+  const lastStr = last ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '—';
+  el.innerHTML = `
+    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
+    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
+    <span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:4px">· ${lastStr}</span>
+  `;
+}
+
+// =================== PRIORIDADES ===================
     const PRIORIDADES = {
       'Incorrecta Segregación RP':          { nivel:'Alto',      diasLimite:1, color:'#DC2626', bg:'rgba(220,38,38,0.1)',   icon:'bi-circle-fill' },
       'Incorrecta Segregación RME':         { nivel:'Bajo',      diasLimite:4, color:'#16A34A', bg:'rgba(22,163,74,0.1)',   icon:'bi-recycle' },
@@ -164,36 +411,11 @@ updateClock(); setInterval(updateClock,1000);
 let fState = { area:null, inc:null, foto:false, fotos:[null,null,null,null,null] };
 
 function selArea(el, nombre) {
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('#areaList .area-list-item').forEach(b=>b.classList.remove('sel'));
   el.classList.add('sel');
   fState.area = nombre;
-  document.getElementById('areaOtrosWrap').style.display = 'none';
   document.getElementById('chk2').classList.add('on');
   document.getElementById('fc3').classList.remove('locked');
-  checkForm();
-}
-
-function selAreaOtros() {
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
-  document.getElementById('areaOtrosItem').classList.add('sel');
-  document.getElementById('areaOtrosWrap').style.display = 'block';
-  document.getElementById('areaOtrosInput').focus();
-  fState.area = null;
-  document.getElementById('chk2').classList.remove('on');
-  document.getElementById('fc3').classList.add('locked');
-  checkForm();
-}
-
-function updateAreaOtros(val) {
-  if (val.trim().length > 0) {
-    fState.area = val.trim();
-    document.getElementById('chk2').classList.add('on');
-    document.getElementById('fc3').classList.remove('locked');
-  } else {
-    fState.area = null;
-    document.getElementById('chk2').classList.remove('on');
-    document.getElementById('fc3').classList.add('locked');
-  }
   checkForm();
 }
 
@@ -342,6 +564,7 @@ function guardarOA() {
 
   const nuevo = {
     folio: nuevoFolio,
+    inspector: inspectorActual || '—',
     area: fState.area,
     tipo: tipo,
     nivel: prio.nivel,
@@ -371,8 +594,8 @@ function guardarOA() {
 
 function resetNuevo() {
   fState = {area:null,inc:null,foto:false,fotos:[null,null,null,null,null]};
-  document.querySelectorAll('.area-list-item').forEach(b=>b.classList.remove('sel'));
-  document.querySelectorAll('.inc-item').forEach(i=>i.classList.remove('sel'));
+  document.querySelectorAll('#areaList .area-list-item').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('#fc3 .inc-item').forEach(i=>i.classList.remove('sel'));
   const pb = document.getElementById('prioBadge'); if(pb) pb.remove();
   for(let i=0;i<5;i++){
     document.getElementById('fotoImg'+i).src='';
@@ -382,8 +605,6 @@ function resetNuevo() {
   }
   document.getElementById('fotosCount').textContent='0';
   document.getElementById('notasTa').value='';
-  document.getElementById('areaOtrosWrap').style.display='none';
-  document.getElementById('areaOtrosInput').value='';
   document.getElementById('areaSearch').value='';
   filterAreas('');
   ['chk2','chk3','chk4','chk5'].forEach(id=>document.getElementById(id).classList.remove('on'));
@@ -443,7 +664,7 @@ function renderRegistros() {
           <div class="reg-meta-item"><i class="bi bi-calendar3"></i> Días: ${diasDesv}</div>
         </div>
       </div>
-      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" style="display:block" onclick="verDetalle('${r.folio}')">` : ''}
+      ${r.foto ? `<img class="reg-img-thumb" src="${r.foto}" onclick="abrirVisor(${JSON.stringify(r.fotos && r.fotos.length ? r.fotos : [r.foto])},0)" style="cursor:zoom-in">` : ''}
       <div class="reg-card-footer">
         <button class="btn-ver-detalle" onclick="verDetalle('${r.folio}')">Ver detalle →</button>
         <button class="btn-eliminar-oa" onclick="confirmarEliminar('${r.folio}', event)"><i class="bi bi-trash3"></i> Eliminar</button>
@@ -513,6 +734,10 @@ function verDetalle(folio) {
 
   document.getElementById('detalleInfo').innerHTML = `
     <div class="detalle-row">
+      <span class="dr-key">Inspector</span>
+      <span class="dr-val">${r.inspector || '—'}</span>
+    </div>
+    <div class="detalle-row">
       <span class="dr-key">Área</span>
       <span class="dr-val">${r.area}</span>
     </div>
@@ -554,9 +779,10 @@ function verDetalle(folio) {
   if (fotos.length) {
     fotoCard.style.display='block';
     fotosBody.innerHTML = fotos.map((src,i) => `
-      <div style="position:relative">
-        <img src="${src}" style="width:100%;border-radius:10px;max-height:200px;object-fit:cover;display:block">
+      <div style="position:relative;cursor:zoom-in" onclick="abrirVisor(${JSON.stringify(fotos)},${i})">
+        <img src="${src}" style="width:100%;border-radius:10px;object-fit:contain;max-height:280px;background:#f8f9fb;display:block">
         <div style="position:absolute;bottom:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;backdrop-filter:blur(4px)">Foto ${i+1}</div>
+        <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.5);color:white;font-size:11px;padding:3px 8px;border-radius:10px;backdrop-filter:blur(4px)"><i class="bi bi-zoom-in"></i></div>
       </div>
     `).join('');
   } else {
@@ -738,115 +964,136 @@ function generarPDF() {
   };
 }
 
-// =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TEv7hF5ts4cVQoT9eBzcGI2uvFOcwMRW3PMwBS0mHG9auyA8XPMWfgtxnkAw3RkL/exec';
-const SYNC_KEY = 'tng_last_sync';
+// =================== EXPORTAR EXCEL ===================
+function exportarExcel() {
+  if (!registros || registros.length === 0) {
+    showToast('<i class="bi bi-exclamation-triangle"></i> No hay OAs para exportar');
+    return;
+  }
 
-let sincronizando = false;
-
-// Sincroniza registros locales → Google Sheets
-async function sincronizarNube() {
-  if (sincronizando) return;
-  sincronizando = true;
-  mostrarSyncStatus('syncing');
-
-  try {
-    // Enviar sin fotos para no exceder límites de Google
-    const payload = {
-      action: 'sync',
-      registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
-      folioCounter
-    };
-
-    const resp = await fetch(SHEETS_URL, {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-
-    const data = await resp.json();
-
-    if (data.status === 'ok') {
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      mostrarSyncStatus('ok');
-      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado con Google Sheets');
-    } else {
-      throw new Error('Respuesta inesperada');
-    }
-  } catch(e) {
-    mostrarSyncStatus('error');
-    showToast('<i class="bi bi-cloud-slash-fill"></i> Sin conexión — datos guardados localmente');
-  } finally {
-    sincronizando = false;
+  // SheetJS (xlsx) - cargado dinámicamente
+  if (typeof XLSX === 'undefined') {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    script.onload = () => _generarExcel();
+    document.head.appendChild(script);
+  } else {
+    _generarExcel();
   }
 }
 
-// Carga registros desde Google Sheets (al abrir en computadora)
-async function cargarDesdeNube() {
-  mostrarSyncStatus('syncing');
-  try {
-    const resp = await fetch(SHEETS_URL, {
-      method: 'POST',
-      body: JSON.stringify({ action: 'get' })
-    });
+function _generarExcel() {
+  const wb = XLSX.utils.book_new();
 
-    const data = await resp.json();
+  // ============ HOJA: NIVEL DE ATENCIÓN (idéntica al original) ============
+  const nivelData = [
+    ['PRIORIDAD DE ATENCIÓN','Nivel','Días',null,'NIVELES','BAJO','MEDIO ','ALTO ','INMEDIATO'],
+    ['Incorrecta Segregación de Residuos RP','Alto',1,null,'DÍA DE CIERRE',4,2,1,0],
+    ['Incorrecta Segregación de Residuos RME','Bajo',4],
+    ['Incorrecto Almacenaje de Materiales','Medio',2],
+    ['Orden y Limpieza','Medio',2],
+    ['Movimiento de Residuos','Bajo',4],
+    ['Contaminación al Suelo (DERRAMES)','Inmediato',0],
+    ['Agotamiento de los Recursos (FUGAS)','Alto',1],
+    [],
+    ['Estatus'],
+    ['Abierto'],
+    ['Cerrado'],
+  ];
+  const wsNivel = XLSX.utils.aoa_to_sheet(nivelData);
+  wsNivel['!cols'] = [{wch:35},{wch:12},{wch:8},{wch:4},{wch:14},{wch:8},{wch:8},{wch:8},{wch:12}];
+  XLSX.utils.book_append_sheet(wb, wsNivel, 'NIVEL DE ATENCIÓN');
 
-    if (data.status === 'ok' && data.registros && data.registros.length > 0) {
-      // Fusionar: priorizar nube, conservar datos locales que no estén en nube
-      const foliosNube = new Set(data.registros.map(r => r.folio));
-      const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
-      registros = [...data.registros, ...soloLocales];
+  // ============ HOJA: BITÁCORA — mismas columnas que el original ============
+  // A=FOLIO OA, B=Hora inicio, C=Hora finalización, D=Fecha, E=Correo electrónico,
+  // F=Columna1, G=SUPERINTENDENTE, H=RESPONSABLE, I=ÁREA, J=NUMERO DE PROYECTO,
+  // K=Área, L=Categorías, M=Nivel, N=Días, O=Comentario,
+  // P=Día Esperado de Cierre, Q=Dias Transcurridos, R=Hoy, S=Estatus, T= , U=Tiempo de Cierre
 
-      // Migración de campos faltantes
-      registros = registros.map(r => {
-        if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
-        if (r.fechaCierreISO === undefined || r.fechaCierreISO === '') r.fechaCierreISO = null;
-        if (!r.fotos) r.fotos = [];
-        if (!r.foto) r.foto = '';
-        return r;
-      });
+  const headers = [
+    'FOLIO OA','Hora de inicio','Hora de finalización','Fecha',
+    'Correo electrónico','Columna1','SUPERINTENDENTE','RESPONSABLE',
+    'ÁREA ','NUMERO DE PROYECTO','Área','Categorías',
+    'Nivel','Días','Comentario Obligatoria "Se detecto ..."',
+    'Día Esperado de Cierre','Dias Transcurridos','Hoy',
+    'Estatus',' ','Tiempo de Cierre'
+  ];
 
-      // Actualizar folio counter desde la nube
-      if (data.folioCounter && data.folioCounter > folioCounter) {
-        folioCounter = parseInt(data.folioCounter) + 1;
+  const filas = [headers];
+
+  registros.forEach((r, i) => {
+    const rowNum = i + 2;
+    const prio = getPrioridad(r.tipo);
+
+    let horaInicio = '', horaFin = '', fechaStr = '';
+    let diaEsperado = '', diasTransc = '', hoy = '', fechaCierreStr = '', tiempoCierre = '';
+
+    if (r.fechaAperturaISO) {
+      const dt = new Date(r.fechaAperturaISO);
+      horaInicio = dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+      horaFin    = horaInicio;
+      fechaStr   = dt.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const diasLim = r.diasLimite ?? prio.diasLimite ?? 0;
+      const limite = new Date(dt);
+      limite.setDate(limite.getDate() + diasLim);
+      diaEsperado = limite.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      const fin = r.fechaCierreISO ? new Date(r.fechaCierreISO) : new Date();
+      diasTransc  = Math.floor((fin - dt)/(1000*60*60*24));
+      hoy         = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+    }
+
+    if (r.fechaCierreISO) {
+      const dc = new Date(r.fechaCierreISO);
+      fechaCierreStr = dc.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'});
+      if (r.fechaAperturaISO) {
+        const da = new Date(r.fechaAperturaISO);
+        tiempoCierre = Math.floor((dc - da)/(1000*60*60*24));
       }
-
-      await guardarEnStorage();
-      updateStats();
-      mostrarSyncStatus('ok');
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      return true;
-    } else {
-      mostrarSyncStatus('ok');
-      return false;
     }
-  } catch(e) {
-    console.warn('Sin conexión a la nube:', e);
-    mostrarSyncStatus('offline');
-    return false;
-  }
-}
 
-// Indicador visual de estado de sync en el menú
-function mostrarSyncStatus(estado) {
-  const el = document.getElementById('syncStatus');
-  if (!el) return;
-  const estados = {
-    syncing: { icon: 'bi-cloud-arrow-up-fill', color: '#D97706', text: 'Sincronizando...' },
-    ok:      { icon: 'bi-cloud-check-fill',    color: '#16A34A', text: 'Sincronizado' },
-    error:   { icon: 'bi-cloud-slash-fill',    color: '#DC2626', text: 'Sin conexión' },
-    offline: { icon: 'bi-cloud-slash-fill',    color: '#6B7B9A', text: 'Sin conexión' },
-  };
-  const s = estados[estado] || estados.offline;
-  const lastSync = localStorage.getItem(SYNC_KEY);
-  const lastStr = lastSync
-    ? new Date(lastSync).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'})
-    : '—';
-  el.innerHTML = `
-    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
-    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
-    <span style="font-size:10px;color:var(--mid);margin-left:4px">· Última sync: ${lastStr}</span>
-  `;
+    filas.push([
+      r.folio || '',          // A - FOLIO OA
+      horaInicio,             // B - Hora de inicio
+      horaFin,                // C - Hora de finalización
+      fechaStr,               // D - Fecha
+      r.inspector || '—',    // E - Correo electrónico (inspector)
+      '',                     // F - Columna1
+      '—',                    // G - SUPERINTENDENTE
+      '—',                    // H - RESPONSABLE
+      r.area || '',           // I - ÁREA
+      '—',                    // J - NUMERO DE PROYECTO
+      '—',                    // K - Área funcional
+      r.tipo || '',           // L - Categorías
+      prio.nivel || '—',      // M - Nivel
+      r.diasLimite ?? prio.diasLimite ?? '—',  // N - Días
+      r.notas || '',          // O - Comentario
+      diaEsperado,            // P - Día Esperado de Cierre
+      diasTransc,             // Q - Dias Transcurridos
+      hoy,                    // R - Hoy
+      r.estatus === 'cerrada' ? 'Cerrado' : 'Abierto',  // S - Estatus
+      fechaCierreStr,         // T - (espacio = fecha cierre real)
+      tiempoCierre,           // U - Tiempo de Cierre
+    ]);
+  });
+
+  const wsBit = XLSX.utils.aoa_to_sheet(filas);
+
+  // Anchos exactos del original
+  wsBit['!cols'] = [
+    {wch:11.66},{wch:16},{wch:20.88},{wch:20.88},{wch:19.88},{wch:19.88},
+    {wch:23.10},{wch:20},{wch:23.10},{wch:18.33},{wch:13},{wch:34},
+    {wch:13},{wch:12.55},{wch:32.10},{wch:16.33},{wch:13.33},{wch:11.10},
+    {wch:16.33},{wch:11.44},{wch:15.44}
+  ];
+
+  // Freeze fila 1
+  wsBit['!freeze'] = {xSplit:0, ySplit:1, topLeftCell:'A2', activePane:'bottomLeft', state:'frozen'};
+
+  XLSX.utils.book_append_sheet(wb, wsBit, 'Bitacora');
+
+  const fecha = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  XLSX.writeFile(wb, `Bitacora_OA_TNG_${fecha}.xlsx`);
+  showToast('<i class="bi bi-file-earmark-excel"></i> Bitácora exportada correctamente');
 }
 
 // =================== TOAST ===================
@@ -859,13 +1106,6 @@ function showToast(msg) {
 
 // Init
 updateStats();
-
-// Al abrir la app, intentar cargar datos desde la nube
 cargarDesdeNube().then(cargado => {
-  if (cargado) {
-    renderRegistros();
-    updateStats();
-  } else {
-    mostrarSyncStatus('offline');
-  }
+  if (cargado) { renderRegistros(); updateStats(); }
 });
