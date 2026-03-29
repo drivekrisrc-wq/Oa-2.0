@@ -135,6 +135,7 @@ function guardarEdicion() {
   if (!currentDetalle) return;
   const reg = registros.find(r => r.folio === currentDetalle.folio);
   if (!reg) return;
+
   const notasVal = document.getElementById('editNotasTa')?.value || '';
   if (editState.area) reg.area = editState.area;
   if (editState.inc) {
@@ -144,72 +145,70 @@ function guardarEdicion() {
     reg.diasLimite = prio.diasLimite;
   }
   reg.notas = notasVal;
+
   guardarEnStorage();
   sincronizarNube();
   showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
   currentDetalle = reg;
-  setTimeout(() => { goTo('screenEditar', 'screenDetalle'); verDetalle(reg.folio); }, 800);
+
+  setTimeout(() => {
+    goTo('screenEditar', 'screenDetalle');
+    verDetalle(reg.folio);
+  }, 800);
 }
 
 // =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TEv7hF5ts4cVQoT9eBzcGI2uvFOcwMRW3PMwBS0mHG9auyA8XPMWfgtxnkAw3RkL/exec';
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyU7w8_b6mfURZ_Lzz2BWbPh3WV1TPA9BnFp2DawGUoHFc6RaGU7H3ZysMSap9Dwhf6/exec';
 const SYNC_KEY = 'tng_last_sync';
 let sincronizando = false;
 
-// Llamada JSONP genérica
-function jsonpCall(params) {
+// JSONP helper — funciona sin restricciones de CORS
+function jsonpCall(url) {
   return new Promise(resolve => {
-    const cbName = 'oaCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
-    const script = document.createElement('script');
+    const id = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    const s  = document.createElement('script');
     let done = false;
 
     const timer = setTimeout(() => {
       if (!done) { done = true; cleanup(); resolve(null); }
     }, 10000);
 
-    window[cbName] = function(data) {
+    window[id] = d => {
       if (done) return;
-      done = true;
-      clearTimeout(timer);
-      cleanup();
-      resolve(data);
+      done = true; clearTimeout(timer); cleanup(); resolve(d);
     };
 
     function cleanup() {
-      if (script.parentNode) script.parentNode.removeChild(script);
-      delete window[cbName];
+      if (s.parentNode) s.parentNode.removeChild(s);
+      delete window[id];
     }
 
-    const qs = Object.entries({ ...params, callback: cbName, t: Date.now() })
-      .map(([k, v]) => k + '=' + encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v))
-      .join('&');
-
-    script.onerror = () => {
+    s.onerror = () => {
       if (!done) { done = true; clearTimeout(timer); cleanup(); resolve(null); }
     };
-    script.src = SHEETS_URL + '?' + qs;
-    document.head.appendChild(script);
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + id + '&t=' + Date.now();
+    document.head.appendChild(s);
   });
 }
 
+// Enviar datos a Google Sheets
 async function sincronizarNube() {
   if (sincronizando) return;
   sincronizando = true;
   mostrarSyncStatus('syncing');
   try {
-    const payload = {
+    const payload = encodeURIComponent(JSON.stringify({
       action: 'sync',
       registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
       folioCounter
-    };
-    const data = await jsonpCall({ payload: JSON.stringify(payload) });
+    }));
+    const data = await jsonpCall(SHEETS_URL + '?payload=' + payload);
     if (data && data.status === 'ok') {
       localStorage.setItem(SYNC_KEY, new Date().toISOString());
       mostrarSyncStatus('ok');
-      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado con Google Sheets');
+      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado correctamente');
     } else {
       mostrarSyncStatus('error');
-      showToast('<i class="bi bi-cloud-slash-fill"></i> Sin conexión — guardado localmente');
     }
   } catch(e) {
     mostrarSyncStatus('error');
@@ -218,9 +217,10 @@ async function sincronizarNube() {
   }
 }
 
+// Cargar datos desde Google Sheets
 async function cargarDesdeNube() {
   mostrarSyncStatus('syncing');
-  const data = await jsonpCall({ action: 'get' });
+  const data = await jsonpCall(SHEETS_URL);
   if (!data) { mostrarSyncStatus('offline'); return false; }
   try {
     if (data.status === 'ok' && data.registros && data.registros.length > 0) {
@@ -254,14 +254,16 @@ function mostrarSyncStatus(estado) {
   const el = document.getElementById('syncStatus');
   if (!el) return;
   const map = {
-    syncing: { icon: 'bi-cloud-arrow-up-fill', color: '#D97706', text: 'Sincronizando...' },
-    ok:      { icon: 'bi-cloud-check-fill',    color: '#6EE7B7', text: 'Sincronizado'    },
-    error:   { icon: 'bi-cloud-slash-fill',    color: '#F87171', text: 'Error de conexión'},
-    offline: { icon: 'bi-cloud-slash-fill',    color: '#9CA3AF', text: 'Sin conexión'    },
+    syncing: { icon:'bi-cloud-arrow-up-fill', color:'#D97706', text:'Sincronizando...' },
+    ok:      { icon:'bi-cloud-check-fill',    color:'#6EE7B7', text:'Sincronizado'     },
+    error:   { icon:'bi-cloud-slash-fill',    color:'#F87171', text:'Error de conexión'},
+    offline: { icon:'bi-cloud-slash-fill',    color:'#9CA3AF', text:'Sin conexión'     },
   };
   const s = map[estado] || map.offline;
   const last = localStorage.getItem(SYNC_KEY);
-  const lastStr = last ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '—';
+  const lastStr = last
+    ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
+    : '—';
   el.innerHTML = `
     <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
     <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
