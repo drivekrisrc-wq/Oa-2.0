@@ -135,7 +135,6 @@ function guardarEdicion() {
   if (!currentDetalle) return;
   const reg = registros.find(r => r.folio === currentDetalle.folio);
   if (!reg) return;
-
   const notasVal = document.getElementById('editNotasTa')?.value || '';
   if (editState.area) reg.area = editState.area;
   if (editState.inc) {
@@ -145,16 +144,218 @@ function guardarEdicion() {
     reg.diasLimite = prio.diasLimite;
   }
   reg.notas = notasVal;
-
   guardarEnStorage();
   sincronizarNube();
   showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
   currentDetalle = reg;
+  setTimeout(() => { goTo('screenEditar', 'screenDetalle'); verDetalle(reg.folio); }, 800);
+}
 
-  setTimeout(() => {
-    goTo('screenEditar', 'screenDetalle');
-    verDetalle(reg.folio);
-  }, 800);
+// =================== SUPABASE ===================
+const SB_URL  = 'https://rbvoxtqvcavapxwjwmaf.supabase.co';
+const SB_KEY  = 'sb_publishable_SBYEEhjW06rB_qr-jDPt3Q_HLisHjtk';
+const SYNC_KEY = 'tng_last_sync';
+let sincronizando = false;
+
+function sbHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'apikey': SB_KEY,
+    'Authorization': 'Bearer ' + SB_KEY,
+    'Prefer': 'return=minimal'
+  };
+}
+
+// Subir una foto base64 al bucket y devolver URL pública
+async function subirFoto(base64, folio, idx) {
+  if (!base64 || base64 === '[foto]' || !base64.startsWith('data:image')) return null;
+  try {
+    // Convertir base64 a blob
+    const res  = await fetch(base64);
+    const blob = await res.blob();
+    const ext  = blob.type.includes('png') ? 'png' : 'jpg';
+    const path = `${folio}/foto_${idx}.${ext}`;
+
+    const resp = await fetch(`${SB_URL}/storage/v1/object/fotos-oa/${path}`, {
+      method: 'POST',
+      headers: {
+        'apikey': SB_KEY,
+        'Authorization': 'Bearer ' + SB_KEY,
+        'Content-Type': blob.type,
+        'x-upsert': 'true'
+      },
+      body: blob
+    });
+
+    if (!resp.ok) return null;
+    return `${SB_URL}/storage/v1/object/public/fotos-oa/${path}`;
+  } catch(e) {
+    return null;
+  }
+}
+
+// Sincronizar una OA a Supabase (upsert)
+async function sincronizarOA(r) {
+  // Subir fotos que sean base64 y reemplazar por URLs
+  const fotosUrls = await Promise.all(
+    (r.fotos || []).map((f, i) =>
+      f && f.startsWith('data:image') ? subirFoto(f, r.folio, i) : Promise.resolve(f)
+    )
+  );
+  const fotoUrlFiltradas = fotosUrls.filter(Boolean);
+
+  const payload = {
+    folio:         r.folio,
+    inspector:     r.inspector || '—',
+    area:          r.area,
+    tipo:          r.tipo,
+    nivel:         r.nivel || '',
+    fecha:         r.fecha,
+    hora:          r.hora,
+    estatus:       r.estatus,
+    fecha_apertura: r.fechaAperturaISO || null,
+    fecha_cierre:  r.fechaCierreISO   || null,
+    dias_limite:   r.diasLimite ?? null,
+    notas:         r.notas || '',
+    fotos:         fotoUrlFiltradas
+  };
+
+  const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
+    method: 'GET',
+    headers: sbHeaders()
+  });
+  const existe = resp.ok && (await resp.json()).length > 0;
+
+  if (existe) {
+    await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
+      method: 'PATCH',
+      headers: sbHeaders(),
+      body: JSON.stringify(payload)
+    });
+  } else {
+    await fetch(`${SB_URL}/rest/v1/oas`, {
+      method: 'POST',
+      headers: { ...sbHeaders(), 'Prefer': 'return=minimal' },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  // Actualizar URLs en el registro local
+  if (fotoUrlFiltradas.length > 0) {
+    r.fotos = fotoUrlFiltradas;
+    r.foto  = fotoUrlFiltradas[0];
+    guardarEnStorage();
+  }
+}
+
+async function sincronizarNube() {
+  if (sincronizando) return;
+  sincronizando = true;
+  mostrarSyncStatus('syncing');
+  try {
+    await Promise.all(registros.map(r => sincronizarOA(r)));
+    localStorage.setItem(SYNC_KEY, new Date().toISOString());
+    mostrarSyncStatus('ok');
+    showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado correctamente');
+  } catch(e) {
+    mostrarSyncStatus('error');
+    showToast('<i class="bi bi-cloud-slash-fill"></i> Error al sincronizar');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+async function cargarDesdeNube() {
+  mostrarSyncStatus('syncing');
+  try {
+    const resp = await fetch(
+      `${SB_URL}/rest/v1/oas?select=*&order=fecha_apertura.desc`,
+      { headers: sbHeaders() }
+    );
+    if (!resp.ok) { mostrarSyncStatus('offline'); return false; }
+    const data = await resp.json();
+    if (!data || data.length === 0) { mostrarSyncStatus('ok'); return false; }
+
+    // Mapa de fotos locales base64 para no perderlas
+    const fotosLocales = {};
+    registros.forEach(r => {
+      const b64 = (r.fotos || []).filter(f => f && f.startsWith('data:image'));
+      if (b64.length) fotosLocales[r.folio] = { fotos: r.fotos, foto: r.foto };
+    });
+
+    const foliosNube = new Set(data.map(r => r.folio));
+    const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
+
+    registros = [
+      ...data.map(r => {
+        const local = fotosLocales[r.folio];
+        const fotos = local ? local.fotos : (r.fotos || []);
+        const foto  = local ? local.foto  : (fotos[0] || '');
+        return {
+          folio:           r.folio,
+          inspector:       r.inspector || '—',
+          area:            r.area,
+          tipo:            r.tipo,
+          nivel:           r.nivel,
+          fecha:           r.fecha,
+          hora:            r.hora,
+          estatus:         r.estatus,
+          fechaAperturaISO: r.fecha_apertura,
+          fechaCierreISO:  r.fecha_cierre || null,
+          diasLimite:      r.dias_limite,
+          notas:           r.notas || '',
+          fotos,
+          foto
+        };
+      }),
+      ...soloLocales
+    ];
+
+    // Actualizar folio counter
+    const maxNum = registros.reduce((max, r) => {
+      const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
+      return n > max ? n : max;
+    }, folioCounter);
+    if (maxNum >= folioCounter) folioCounter = maxNum + 1;
+
+    guardarEnStorage();
+    updateStats();
+    localStorage.setItem(SYNC_KEY, new Date().toISOString());
+    mostrarSyncStatus('ok');
+    return true;
+  } catch(e) {
+    mostrarSyncStatus('offline');
+    return false;
+  }
+}
+
+// Eliminar OA de Supabase
+async function eliminarDeNube(folio) {
+  try {
+    await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(folio)}`, {
+      method: 'DELETE',
+      headers: sbHeaders()
+    });
+  } catch(e) {}
+}
+
+function mostrarSyncStatus(estado) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const map = {
+    syncing: { icon:'bi-cloud-arrow-up-fill', color:'#D97706', text:'Sincronizando...' },
+    ok:      { icon:'bi-cloud-check-fill',    color:'#6EE7B7', text:'Sincronizado'     },
+    error:   { icon:'bi-cloud-slash-fill',    color:'#F87171', text:'Error'            },
+    offline: { icon:'bi-cloud-slash-fill',    color:'#9CA3AF', text:'Sin conexión'     },
+  };
+  const s = map[estado] || map.offline;
+  const last = localStorage.getItem(SYNC_KEY);
+  const lastStr = last ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '—';
+  el.innerHTML = `
+    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
+    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
+    <span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:4px">· ${lastStr}</span>
+  `;
 }
 
 // =================== PRIORIDADES ===================
@@ -598,7 +799,7 @@ function cancelarEliminar(folio) {
 function eliminarOA(folio) {
   registros = registros.filter(r => r.folio !== folio);
   guardarEnStorage();
-  sincronizarNube();
+  eliminarDeNube(folio);
   updateStats();
   renderRegistros();
   showToast('<i class="bi bi-trash3"></i> OA ' + folio + ' eliminada');
@@ -989,144 +1190,6 @@ function _generarExcel() {
   const fecha = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
   XLSX.writeFile(wb, `Bitacora_OA_TNG_${fecha}.xlsx`);
   showToast('<i class="bi bi-file-earmark-excel"></i> Bitácora exportada correctamente');
-}
-
-// =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyU7w8_b6mfURZ_Lzz2BWbPh3WV1TPA9BnFp2DawGUoHFc6RaGU7H3ZysMSap9Dwhf6/exec';
-const SYNC_KEY = 'tng_last_sync';
-let sincronizando = false;
-
-function jsonpCall(url) {
-  return new Promise(resolve => {
-    const id = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*9999);
-    const s  = document.createElement('script');
-    let done = false;
-    const timer = setTimeout(() => {
-      if (!done) { done = true; cleanup(); resolve(null); }
-    }, 10000);
-    window[id] = d => {
-      if (done) return;
-      done = true; clearTimeout(timer); cleanup(); resolve(d);
-    };
-    function cleanup() {
-      if (s.parentNode) s.parentNode.removeChild(s);
-      delete window[id];
-    }
-    s.onerror = () => {
-      if (!done) { done = true; clearTimeout(timer); cleanup(); resolve(null); }
-    };
-    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + id + '&t=' + Date.now();
-    document.head.appendChild(s);
-  });
-}
-
-async function sincronizarNube() {
-  if (sincronizando) return;
-  sincronizando = true;
-  mostrarSyncStatus('syncing');
-  try {
-    const payload = encodeURIComponent(JSON.stringify({
-      action: 'sync',
-      registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
-      folioCounter
-    }));
-    const data = await jsonpCall(SHEETS_URL + '?payload=' + payload);
-    if (data && data.status === 'ok') {
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      mostrarSyncStatus('ok');
-      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado correctamente');
-    } else {
-      mostrarSyncStatus('error');
-    }
-  } catch(e) {
-    mostrarSyncStatus('error');
-  } finally {
-    sincronizando = false;
-  }
-}
-
-async function cargarDesdeNube() {
-  mostrarSyncStatus('syncing');
-  const data = await jsonpCall(SHEETS_URL);
-  if (!data) { mostrarSyncStatus('offline'); return false; }
-  try {
-    if (data.status === 'ok' && data.registros && data.registros.length > 0) {
-
-      // Construir mapa de fotos locales para no perderlas
-      const fotosLocales = {};
-      registros.forEach(r => {
-        if (r.folio && (r.fotos?.length || r.foto)) {
-          fotosLocales[r.folio] = { fotos: r.fotos || [], foto: r.foto || '' };
-        }
-      });
-
-      const foliosNube = new Set(data.registros.map(r => r.folio));
-      const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
-
-      registros = [...data.registros, ...soloLocales].map(r => {
-        // Restaurar fotos desde localStorage
-        if (fotosLocales[r.folio]) {
-          r.fotos = fotosLocales[r.folio].fotos;
-          r.foto  = fotosLocales[r.folio].foto;
-        } else {
-          r.fotos = r.fotos || [];
-          r.foto  = r.foto  || '';
-        }
-
-        // Arreglar fecha y hora si vienen en formato ISO raro desde Sheets
-        if (r.fechaAperturaISO) {
-          // Limpiar posibles fechas dobles (bug de Sheets)
-          const isoClean = String(r.fechaAperturaISO).split(' ')[0];
-          try {
-            const dt = new Date(isoClean);
-            if (!isNaN(dt)) {
-              r.fecha = dt.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
-              r.hora  = dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
-              r.fechaAperturaISO = dt.toISOString();
-            }
-          } catch(e) {}
-        }
-
-        if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
-        if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
-        if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
-        return r;
-      });
-
-      if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
-        folioCounter = parseInt(data.folioCounter) + 1;
-
-      guardarEnStorage();
-      updateStats();
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      mostrarSyncStatus('ok');
-      return true;
-    }
-    mostrarSyncStatus('ok');
-    return false;
-  } catch(e) {
-    mostrarSyncStatus('error');
-    return false;
-  }
-}
-
-function mostrarSyncStatus(estado) {
-  const el = document.getElementById('syncStatus');
-  if (!el) return;
-  const map = {
-    syncing: { icon:'bi-cloud-arrow-up-fill', color:'#D97706', text:'Sincronizando...' },
-    ok:      { icon:'bi-cloud-check-fill',    color:'#6EE7B7', text:'Sincronizado'     },
-    error:   { icon:'bi-cloud-slash-fill',    color:'#F87171', text:'Error de conexión'},
-    offline: { icon:'bi-cloud-slash-fill',    color:'#9CA3AF', text:'Sin conexión'     },
-  };
-  const s = map[estado] || map.offline;
-  const last = localStorage.getItem(SYNC_KEY);
-  const lastStr = last ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '—';
-  el.innerHTML = `
-    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
-    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
-    <span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:4px">· ${lastStr}</span>
-  `;
 }
 
 // =================== TOAST ===================
