@@ -157,120 +157,6 @@ function guardarEdicion() {
   }, 800);
 }
 
-// =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
-const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyU7w8_b6mfURZ_Lzz2BWbPh3WV1TPA9BnFp2DawGUoHFc6RaGU7H3ZysMSap9Dwhf6/exec';
-const SYNC_KEY = 'tng_last_sync';
-let sincronizando = false;
-
-// JSONP helper — funciona sin restricciones de CORS
-function jsonpCall(url) {
-  return new Promise(resolve => {
-    const id = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*9999);
-    const s  = document.createElement('script');
-    let done = false;
-
-    const timer = setTimeout(() => {
-      if (!done) { done = true; cleanup(); resolve(null); }
-    }, 10000);
-
-    window[id] = d => {
-      if (done) return;
-      done = true; clearTimeout(timer); cleanup(); resolve(d);
-    };
-
-    function cleanup() {
-      if (s.parentNode) s.parentNode.removeChild(s);
-      delete window[id];
-    }
-
-    s.onerror = () => {
-      if (!done) { done = true; clearTimeout(timer); cleanup(); resolve(null); }
-    };
-    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + id + '&t=' + Date.now();
-    document.head.appendChild(s);
-  });
-}
-
-// Enviar datos a Google Sheets
-async function sincronizarNube() {
-  if (sincronizando) return;
-  sincronizando = true;
-  mostrarSyncStatus('syncing');
-  try {
-    const payload = encodeURIComponent(JSON.stringify({
-      action: 'sync',
-      registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
-      folioCounter
-    }));
-    const data = await jsonpCall(SHEETS_URL + '?payload=' + payload);
-    if (data && data.status === 'ok') {
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      mostrarSyncStatus('ok');
-      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado correctamente');
-    } else {
-      mostrarSyncStatus('error');
-    }
-  } catch(e) {
-    mostrarSyncStatus('error');
-  } finally {
-    sincronizando = false;
-  }
-}
-
-// Cargar datos desde Google Sheets
-async function cargarDesdeNube() {
-  mostrarSyncStatus('syncing');
-  const data = await jsonpCall(SHEETS_URL);
-  if (!data) { mostrarSyncStatus('offline'); return false; }
-  try {
-    if (data.status === 'ok' && data.registros && data.registros.length > 0) {
-      const foliosNube = new Set(data.registros.map(r => r.folio));
-      const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
-      registros = [...data.registros, ...soloLocales].map(r => {
-        if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
-        if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
-        if (!r.fotos) r.fotos = [];
-        if (!r.foto)  r.foto  = '';
-        if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
-        return r;
-      });
-      if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
-        folioCounter = parseInt(data.folioCounter) + 1;
-      guardarEnStorage();
-      updateStats();
-      localStorage.setItem(SYNC_KEY, new Date().toISOString());
-      mostrarSyncStatus('ok');
-      return true;
-    }
-    mostrarSyncStatus('ok');
-    return false;
-  } catch(e) {
-    mostrarSyncStatus('error');
-    return false;
-  }
-}
-
-function mostrarSyncStatus(estado) {
-  const el = document.getElementById('syncStatus');
-  if (!el) return;
-  const map = {
-    syncing: { icon:'bi-cloud-arrow-up-fill', color:'#D97706', text:'Sincronizando...' },
-    ok:      { icon:'bi-cloud-check-fill',    color:'#6EE7B7', text:'Sincronizado'     },
-    error:   { icon:'bi-cloud-slash-fill',    color:'#F87171', text:'Error de conexión'},
-    offline: { icon:'bi-cloud-slash-fill',    color:'#9CA3AF', text:'Sin conexión'     },
-  };
-  const s = map[estado] || map.offline;
-  const last = localStorage.getItem(SYNC_KEY);
-  const lastStr = last
-    ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})
-    : '—';
-  el.innerHTML = `
-    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
-    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
-    <span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:4px">· ${lastStr}</span>
-  `;
-}
-
 // =================== PRIORIDADES ===================
     const PRIORIDADES = {
       'Incorrecta Segregación RP':          { nivel:'Alto',      diasLimite:1, color:'#DC2626', bg:'rgba(220,38,38,0.1)',   icon:'bi-circle-fill' },
@@ -1103,6 +989,144 @@ function _generarExcel() {
   const fecha = new Date().toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
   XLSX.writeFile(wb, `Bitacora_OA_TNG_${fecha}.xlsx`);
   showToast('<i class="bi bi-file-earmark-excel"></i> Bitácora exportada correctamente');
+}
+
+// =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbyU7w8_b6mfURZ_Lzz2BWbPh3WV1TPA9BnFp2DawGUoHFc6RaGU7H3ZysMSap9Dwhf6/exec';
+const SYNC_KEY = 'tng_last_sync';
+let sincronizando = false;
+
+function jsonpCall(url) {
+  return new Promise(resolve => {
+    const id = 'cb_' + Date.now() + '_' + Math.floor(Math.random()*9999);
+    const s  = document.createElement('script');
+    let done = false;
+    const timer = setTimeout(() => {
+      if (!done) { done = true; cleanup(); resolve(null); }
+    }, 10000);
+    window[id] = d => {
+      if (done) return;
+      done = true; clearTimeout(timer); cleanup(); resolve(d);
+    };
+    function cleanup() {
+      if (s.parentNode) s.parentNode.removeChild(s);
+      delete window[id];
+    }
+    s.onerror = () => {
+      if (!done) { done = true; clearTimeout(timer); cleanup(); resolve(null); }
+    };
+    s.src = url + (url.includes('?') ? '&' : '?') + 'callback=' + id + '&t=' + Date.now();
+    document.head.appendChild(s);
+  });
+}
+
+async function sincronizarNube() {
+  if (sincronizando) return;
+  sincronizando = true;
+  mostrarSyncStatus('syncing');
+  try {
+    const payload = encodeURIComponent(JSON.stringify({
+      action: 'sync',
+      registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
+      folioCounter
+    }));
+    const data = await jsonpCall(SHEETS_URL + '?payload=' + payload);
+    if (data && data.status === 'ok') {
+      localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      mostrarSyncStatus('ok');
+      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado correctamente');
+    } else {
+      mostrarSyncStatus('error');
+    }
+  } catch(e) {
+    mostrarSyncStatus('error');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+async function cargarDesdeNube() {
+  mostrarSyncStatus('syncing');
+  const data = await jsonpCall(SHEETS_URL);
+  if (!data) { mostrarSyncStatus('offline'); return false; }
+  try {
+    if (data.status === 'ok' && data.registros && data.registros.length > 0) {
+
+      // Construir mapa de fotos locales para no perderlas
+      const fotosLocales = {};
+      registros.forEach(r => {
+        if (r.folio && (r.fotos?.length || r.foto)) {
+          fotosLocales[r.folio] = { fotos: r.fotos || [], foto: r.foto || '' };
+        }
+      });
+
+      const foliosNube = new Set(data.registros.map(r => r.folio));
+      const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
+
+      registros = [...data.registros, ...soloLocales].map(r => {
+        // Restaurar fotos desde localStorage
+        if (fotosLocales[r.folio]) {
+          r.fotos = fotosLocales[r.folio].fotos;
+          r.foto  = fotosLocales[r.folio].foto;
+        } else {
+          r.fotos = r.fotos || [];
+          r.foto  = r.foto  || '';
+        }
+
+        // Arreglar fecha y hora si vienen en formato ISO raro desde Sheets
+        if (r.fechaAperturaISO) {
+          // Limpiar posibles fechas dobles (bug de Sheets)
+          const isoClean = String(r.fechaAperturaISO).split(' ')[0];
+          try {
+            const dt = new Date(isoClean);
+            if (!isNaN(dt)) {
+              r.fecha = dt.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'});
+              r.hora  = dt.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+              r.fechaAperturaISO = dt.toISOString();
+            }
+          } catch(e) {}
+        }
+
+        if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
+        if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
+        if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
+        return r;
+      });
+
+      if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
+        folioCounter = parseInt(data.folioCounter) + 1;
+
+      guardarEnStorage();
+      updateStats();
+      localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      mostrarSyncStatus('ok');
+      return true;
+    }
+    mostrarSyncStatus('ok');
+    return false;
+  } catch(e) {
+    mostrarSyncStatus('error');
+    return false;
+  }
+}
+
+function mostrarSyncStatus(estado) {
+  const el = document.getElementById('syncStatus');
+  if (!el) return;
+  const map = {
+    syncing: { icon:'bi-cloud-arrow-up-fill', color:'#D97706', text:'Sincronizando...' },
+    ok:      { icon:'bi-cloud-check-fill',    color:'#6EE7B7', text:'Sincronizado'     },
+    error:   { icon:'bi-cloud-slash-fill',    color:'#F87171', text:'Error de conexión'},
+    offline: { icon:'bi-cloud-slash-fill',    color:'#9CA3AF', text:'Sin conexión'     },
+  };
+  const s = map[estado] || map.offline;
+  const last = localStorage.getItem(SYNC_KEY);
+  const lastStr = last ? new Date(last).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '—';
+  el.innerHTML = `
+    <i class="bi ${s.icon}" style="color:${s.color};font-size:14px"></i>
+    <span style="font-size:11px;color:${s.color};font-weight:600">${s.text}</span>
+    <span style="font-size:10px;color:rgba(255,255,255,0.4);margin-left:4px">· ${lastStr}</span>
+  `;
 }
 
 // =================== TOAST ===================
