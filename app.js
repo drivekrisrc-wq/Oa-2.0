@@ -170,7 +170,6 @@ function sbHeaders() {
 async function subirFoto(base64, folio, idx) {
   if (!base64 || base64 === '[foto]' || !base64.startsWith('data:image')) return null;
   try {
-    // Convertir base64 a blob
     const res  = await fetch(base64);
     const blob = await res.blob();
     const ext  = blob.type.includes('png') ? 'png' : 'jpg';
@@ -182,14 +181,21 @@ async function subirFoto(base64, folio, idx) {
         'apikey': SB_KEY,
         'Authorization': 'Bearer ' + SB_KEY,
         'Content-Type': blob.type,
-        'x-upsert': 'true'
+        'x-upsert': 'true',
+        'cache-control': '3600'
       },
       body: blob
     });
 
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      const err = await resp.text();
+      console.warn('Error subiendo foto:', resp.status, err);
+      showToast('<i class="bi bi-exclamation-triangle"></i> Error al subir foto: ' + resp.status);
+      return null;
+    }
     return `${SB_URL}/storage/v1/object/public/fotos-oa/${path}`;
   } catch(e) {
+    console.warn('Exception subiendo foto:', e);
     return null;
   }
 }
