@@ -55,16 +55,35 @@ document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') { if(visorFotos.length>1){visorIndex=(visorIndex+1)%visorFotos.length;actualizarVisor();} }
 });
 
-// =================== RESPONSABLE ===================
+function actualizarFolioNuevo(val) {
+  const tag = document.getElementById('folioTag');
+  if (val && parseInt(val) > 0) {
+    if (tag) { tag.textContent = 'OA-' + String(parseInt(val)).padStart(4,'0'); tag.style.background = 'var(--blue-soft)'; tag.style.color = 'var(--blue)'; }
+  } else {
+    if (tag) { tag.textContent = 'AUTO'; tag.style.background = ''; tag.style.color = ''; }
+  }
+}
+
+function actualizarProyecto(val) {
+  const chk = document.getElementById('chkProyecto');
+  if (chk) chk.classList.toggle('on', val && val.length === 4);
+}
 let inspectorActual = null;
 
 function selResponsable(siglas) {
   inspectorActual = siglas;
   showToast('<i class="bi bi-person-check-fill"></i> Inspector: ' + siglas);
   goTo('screenResponsable', 'screenNuevo');
-  // Mostrar badge del inspector en el topbar de nueva OA
+  // Mostrar badge del inspector en el topbar
   const sub = document.getElementById('nuevoFolioSub');
   if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
+  // Inicializar campo folio con el siguiente número automático
+  setTimeout(() => {
+    const fi = document.getElementById('folioInput');
+    if (fi && !fi.value) {
+      fi.placeholder = String(folioCounter).padStart(4,'0');
+    }
+  }, 100);
 }
 
 // =================== EDITAR OA ===================
@@ -75,25 +94,29 @@ function abrirEditar() {
   const r = currentDetalle;
   document.getElementById('editarFolioSub').textContent = r.folio;
 
-  // Preseleccionar área actual
   editState.area = r.area;
-  editState.inc = r.tipo;
+  editState.inc  = r.tipo;
 
   setTimeout(() => {
-    // Marcar área seleccionada
+    // Precargar folio (solo los números)
+    const folioEl = document.getElementById('editFolioInput');
+    if (folioEl) folioEl.value = parseInt(r.folio.replace(/\D/g,'')) || '';
+
+    // Precargar proyecto
+    const proyEl = document.getElementById('editProyectoInput');
+    if (proyEl) proyEl.value = r.proyecto ? r.proyecto.replace('R-','') : '';
+
+    // Marcar área
     document.querySelectorAll('#editAreaList .area-list-item').forEach(el => {
       const name = el.querySelector('.ali-name')?.textContent;
-      if (name && (name === r.area || name.replace('—','-') === r.area.replace('—','-'))) {
+      if (name && (name === r.area || name.replace('—','-') === r.area.replace('—','-')))
         el.classList.add('sel');
-      }
     });
-    // Marcar incumplimiento seleccionado
+    // Marcar incumplimiento
     document.querySelectorAll('#screenEditar .inc-item').forEach(el => {
-      if (el.querySelector('.inc-text')?.textContent === r.tipo) {
-        el.classList.add('sel');
-      }
+      if (el.querySelector('.inc-text')?.textContent === r.tipo) el.classList.add('sel');
     });
-    // Rellenar notas
+    // Notas
     const notasEl = document.getElementById('editNotasTa');
     if (notasEl) notasEl.value = r.notas || '';
   }, 100);
@@ -135,6 +158,29 @@ function guardarEdicion() {
   if (!currentDetalle) return;
   const reg = registros.find(r => r.folio === currentDetalle.folio);
   if (!reg) return;
+
+  // Nuevo folio
+  const folioInputEl = document.getElementById('editFolioInput');
+  if (folioInputEl && folioInputEl.value) {
+    const num = parseInt(folioInputEl.value);
+    if (num > 0) {
+      const nuevoFolio = 'OA-' + String(num).padStart(4,'0');
+      // Si el folio cambió, actualizar contador
+      if (nuevoFolio !== reg.folio) {
+        reg.folio = nuevoFolio;
+        if (num >= folioCounter) folioCounter = num + 1;
+        guardarEnStorage();
+        localStorage.setItem('tng_oa_folio', String(folioCounter));
+      }
+    }
+  }
+
+  // Proyecto
+  const proyEl = document.getElementById('editProyectoInput');
+  if (proyEl) {
+    reg.proyecto = proyEl.value ? 'R-' + proyEl.value : '';
+  }
+
   const notasVal = document.getElementById('editNotasTa')?.value || '';
   if (editState.area) reg.area = editState.area;
   if (editState.inc) {
@@ -144,11 +190,16 @@ function guardarEdicion() {
     reg.diasLimite = prio.diasLimite;
   }
   reg.notas = notasVal;
+
   guardarEnStorage();
   sincronizarNube();
   showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
   currentDetalle = reg;
-  setTimeout(() => { goTo('screenEditar', 'screenDetalle'); verDetalle(reg.folio); }, 800);
+
+  setTimeout(() => {
+    goTo('screenEditar', 'screenDetalle');
+    verDetalle(reg.folio);
+  }, 800);
 }
 
 // =================== SUPABASE ===================
@@ -658,8 +709,20 @@ function checkForm() {
 
 function guardarOA() {
   const now = new Date();
-  const nuevoFolio = 'OA-' + String(folioCounter).padStart(4,'0');
-  folioCounter++;
+
+  // Folio: manual si se ingresó, automático si no
+  const folioInputEl = document.getElementById('folioInput');
+  const folioManual = folioInputEl && folioInputEl.value ? parseInt(folioInputEl.value) : null;
+  const numFolio = folioManual && folioManual > 0 ? folioManual : folioCounter;
+  const nuevoFolio = 'OA-' + String(numFolio).padStart(4,'0');
+
+  // Actualizar contador
+  if (numFolio >= folioCounter) folioCounter = numFolio + 1;
+  else folioCounter++;
+
+  // Proyecto
+  const proyEl = document.getElementById('proyectoInput');
+  const proyecto = proyEl && proyEl.value && proyEl.value.length === 4 ? 'R-' + proyEl.value : '';
 
   const tipo = fState.inc;
   const prio = getPrioridad(tipo);
@@ -671,6 +734,7 @@ function guardarOA() {
     tipo: tipo,
     nivel: prio.nivel,
     diasLimite: prio.diasLimite,
+    proyecto: proyecto,
     fechaAperturaISO: now.toISOString(),
     fecha: now.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}),
     hora: now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}),
@@ -690,7 +754,7 @@ function guardarOA() {
   setTimeout(() => {
     resetNuevo();
     goTo('screenNuevo', 'screenMenu');
-    document.getElementById('nuevoFolioSub').textContent = 'OA-2026-' + String(folioCounter).padStart(4,'0');
+    document.getElementById('nuevoFolioSub').textContent = 'OA-' + String(folioCounter).padStart(4,'0');
   }, 1200);
 }
 
@@ -708,6 +772,15 @@ function resetNuevo() {
   document.getElementById('fotosCount').textContent='0';
   document.getElementById('notasTa').value='';
   document.getElementById('areaSearch').value='';
+  // Limpiar folio y proyecto
+  const fi = document.getElementById('folioInput');
+  if (fi) { fi.value=''; fi.placeholder=String(folioCounter).padStart(4,'0'); }
+  const ft = document.getElementById('folioTag');
+  if (ft) { ft.textContent='AUTO'; ft.style.background=''; ft.style.color=''; }
+  const pi = document.getElementById('proyectoInput');
+  if (pi) pi.value='';
+  const cp = document.getElementById('chkProyecto');
+  if (cp) cp.classList.remove('on');
   filterAreas('');
   ['chk2','chk3','chk4','chk5'].forEach(id=>document.getElementById(id).classList.remove('on'));
   ['fc3','fc4','fc5'].forEach(id=>document.getElementById(id).classList.add('locked'));
@@ -751,6 +824,7 @@ function renderRegistros() {
       </div>
       <div class="reg-card-body" onclick="verDetalle('${r.folio}')">
         <div class="reg-tipo">${r.tipo}</div>
+        ${r.proyecto ? `<div style="font-size:11px;font-weight:700;color:var(--blue);margin:2px 0 4px"><i class="bi bi-briefcase-fill"></i> ${r.proyecto}</div>` : ''}
         <div style="margin:6px 0 4px">
           <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:${prio.bg};color:${prio.color}">
                 ${prioridadIcon(prio)} ${prio.nivel}
@@ -839,6 +913,11 @@ function verDetalle(folio) {
       <span class="dr-key">Inspector</span>
       <span class="dr-val">${r.inspector || '—'}</span>
     </div>
+    ${r.proyecto ? `
+    <div class="detalle-row">
+      <span class="dr-key">Proyecto</span>
+      <span class="dr-val" style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--blue)">${r.proyecto}</span>
+    </div>` : ''}
     <div class="detalle-row">
       <span class="dr-key">Área</span>
       <span class="dr-val">${r.area}</span>
