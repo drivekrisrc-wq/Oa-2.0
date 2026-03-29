@@ -135,7 +135,6 @@ function guardarEdicion() {
   if (!currentDetalle) return;
   const reg = registros.find(r => r.folio === currentDetalle.folio);
   if (!reg) return;
-
   const notasVal = document.getElementById('editNotasTa')?.value || '';
   if (editState.area) reg.area = editState.area;
   if (editState.inc) {
@@ -145,16 +144,11 @@ function guardarEdicion() {
     reg.diasLimite = prio.diasLimite;
   }
   reg.notas = notasVal;
-
   guardarEnStorage();
   sincronizarNube();
   showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
   currentDetalle = reg;
-
-  setTimeout(() => {
-    goTo('screenEditar', 'screenDetalle');
-    verDetalle(reg.folio);
-  }, 800);
+  setTimeout(() => { goTo('screenEditar', 'screenDetalle'); verDetalle(reg.folio); }, 800);
 }
 
 // =================== SINCRONIZACIÓN GOOGLE SHEETS ===================
@@ -162,72 +156,23 @@ const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbx-TEv7hF5ts4cVQoT9e
 const SYNC_KEY = 'tng_last_sync';
 let sincronizando = false;
 
-async function sincronizarNube() {
-  if (sincronizando) return;
-  sincronizando = true;
-  mostrarSyncStatus('syncing');
-  try {
-    await fetch(SHEETS_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({
-        action: 'sync',
-        registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
-        folioCounter
-      })
-    });
-    localStorage.setItem(SYNC_KEY, new Date().toISOString());
-    mostrarSyncStatus('ok');
-    showToast('<i class="bi bi-cloud-check-fill"></i> Datos enviados a la nube');
-  } catch(e) {
-    mostrarSyncStatus('error');
-    showToast('<i class="bi bi-cloud-slash-fill"></i> Sin conexión — guardado localmente');
-  } finally {
-    sincronizando = false;
-  }
-}
-
-function cargarDesdeNube() {
+// Llamada JSONP genérica
+function jsonpCall(params) {
   return new Promise(resolve => {
-    mostrarSyncStatus('syncing');
-    const cbName = 'oaCb_' + Date.now();
+    const cbName = 'oaCb_' + Date.now() + '_' + Math.random().toString(36).slice(2);
     const script = document.createElement('script');
     let done = false;
 
     const timer = setTimeout(() => {
-      if (!done) { done = true; cleanup(); mostrarSyncStatus('offline'); resolve(false); }
-    }, 8000);
+      if (!done) { done = true; cleanup(); resolve(null); }
+    }, 10000);
 
     window[cbName] = function(data) {
       if (done) return;
       done = true;
       clearTimeout(timer);
       cleanup();
-      try {
-        if (data.status === 'ok' && data.registros && data.registros.length > 0) {
-          const foliosNube = new Set(data.registros.map(r => r.folio));
-          const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
-          registros = [...data.registros, ...soloLocales].map(r => {
-            if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
-            if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
-            if (!r.fotos) r.fotos = [];
-            if (!r.foto)  r.foto  = '';
-            if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
-            return r;
-          });
-          if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
-            folioCounter = parseInt(data.folioCounter) + 1;
-          guardarEnStorage();
-          updateStats();
-          localStorage.setItem(SYNC_KEY, new Date().toISOString());
-          mostrarSyncStatus('ok');
-          resolve(true);
-        } else {
-          mostrarSyncStatus('ok');
-          resolve(false);
-        }
-      } catch(e) { mostrarSyncStatus('error'); resolve(false); }
+      resolve(data);
     };
 
     function cleanup() {
@@ -235,12 +180,74 @@ function cargarDesdeNube() {
       delete window[cbName];
     }
 
+    const qs = Object.entries({ ...params, callback: cbName, t: Date.now() })
+      .map(([k, v]) => k + '=' + encodeURIComponent(typeof v === 'object' ? JSON.stringify(v) : v))
+      .join('&');
+
     script.onerror = () => {
-      if (!done) { done = true; clearTimeout(timer); cleanup(); mostrarSyncStatus('offline'); resolve(false); }
+      if (!done) { done = true; clearTimeout(timer); cleanup(); resolve(null); }
     };
-    script.src = SHEETS_URL + '?callback=' + cbName + '&t=' + Date.now();
+    script.src = SHEETS_URL + '?' + qs;
     document.head.appendChild(script);
   });
+}
+
+async function sincronizarNube() {
+  if (sincronizando) return;
+  sincronizando = true;
+  mostrarSyncStatus('syncing');
+  try {
+    const payload = {
+      action: 'sync',
+      registros: registros.map(r => ({ ...r, fotos: [], foto: '' })),
+      folioCounter
+    };
+    const data = await jsonpCall({ payload: JSON.stringify(payload) });
+    if (data && data.status === 'ok') {
+      localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      mostrarSyncStatus('ok');
+      showToast('<i class="bi bi-cloud-check-fill"></i> Sincronizado con Google Sheets');
+    } else {
+      mostrarSyncStatus('error');
+      showToast('<i class="bi bi-cloud-slash-fill"></i> Sin conexión — guardado localmente');
+    }
+  } catch(e) {
+    mostrarSyncStatus('error');
+  } finally {
+    sincronizando = false;
+  }
+}
+
+async function cargarDesdeNube() {
+  mostrarSyncStatus('syncing');
+  const data = await jsonpCall({ action: 'get' });
+  if (!data) { mostrarSyncStatus('offline'); return false; }
+  try {
+    if (data.status === 'ok' && data.registros && data.registros.length > 0) {
+      const foliosNube = new Set(data.registros.map(r => r.folio));
+      const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
+      registros = [...data.registros, ...soloLocales].map(r => {
+        if (!r.fechaAperturaISO) r.fechaAperturaISO = new Date().toISOString();
+        if (!r.fechaCierreISO || r.fechaCierreISO === '') r.fechaCierreISO = null;
+        if (!r.fotos) r.fotos = [];
+        if (!r.foto)  r.foto  = '';
+        if (typeof r.diasLimite === 'string') r.diasLimite = parseInt(r.diasLimite) || null;
+        return r;
+      });
+      if (data.folioCounter && parseInt(data.folioCounter) >= folioCounter)
+        folioCounter = parseInt(data.folioCounter) + 1;
+      guardarEnStorage();
+      updateStats();
+      localStorage.setItem(SYNC_KEY, new Date().toISOString());
+      mostrarSyncStatus('ok');
+      return true;
+    }
+    mostrarSyncStatus('ok');
+    return false;
+  } catch(e) {
+    mostrarSyncStatus('error');
+    return false;
+  }
 }
 
 function mostrarSyncStatus(estado) {
@@ -249,7 +256,7 @@ function mostrarSyncStatus(estado) {
   const map = {
     syncing: { icon: 'bi-cloud-arrow-up-fill', color: '#D97706', text: 'Sincronizando...' },
     ok:      { icon: 'bi-cloud-check-fill',    color: '#6EE7B7', text: 'Sincronizado'    },
-    error:   { icon: 'bi-cloud-slash-fill',    color: '#F87171', text: 'Sin conexión'    },
+    error:   { icon: 'bi-cloud-slash-fill',    color: '#F87171', text: 'Error de conexión'},
     offline: { icon: 'bi-cloud-slash-fill',    color: '#9CA3AF', text: 'Sin conexión'    },
   };
   const s = map[estado] || map.offline;
