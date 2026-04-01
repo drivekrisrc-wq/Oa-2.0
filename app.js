@@ -68,13 +68,13 @@ function actualizarProyecto(val) {
   const chk = document.getElementById('chkProyecto');
   if (chk) chk.classList.toggle('on', val && val.length === 4);
 }
-let inspectorActual = null;
+let supervisorActual = null;
 
 function selResponsable(siglas) {
-  inspectorActual = siglas;
-  showToast('<i class="bi bi-person-check-fill"></i> Inspector: ' + siglas);
+  supervisorActual = siglas;
+  showToast('<i class="bi bi-person-check-fill"></i> Supervisor: ' + siglas);
   goTo('screenResponsable', 'screenNuevo');
-  // Mostrar badge del inspector en el topbar
+  // Mostrar badge del supervisor en el topbar
   const sub = document.getElementById('nuevoFolioSub');
   if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
   // Inicializar campo folio con el siguiente número automático
@@ -262,19 +262,20 @@ async function sincronizarOA(r) {
   const fotoUrlFiltradas = fotosUrls.filter(Boolean);
 
   const payload = {
-    folio:         r.folio,
-    inspector:     r.inspector || '—',
-    area:          r.area,
-    tipo:          r.tipo,
-    nivel:         r.nivel || '',
-    fecha:         r.fecha,
-    hora:          r.hora,
-    estatus:       r.estatus,
+    folio:          r.folio,
+    supervisor:     r.supervisor || '—',
+    area:           r.area,
+    tipo:           r.tipo,
+    nivel:          r.nivel || '',
+    fecha:          r.fecha,
+    hora:           r.hora,
+    estatus:        r.estatus,
     fecha_apertura: r.fechaAperturaISO || null,
-    fecha_cierre:  r.fechaCierreISO   || null,
-    dias_limite:   r.diasLimite ?? null,
-    notas:         r.notas || '',
-    fotos:         fotoUrlFiltradas
+    fecha_cierre:   r.fechaCierreISO   || null,
+    dias_limite:    r.diasLimite ?? null,
+    notas:          r.notas || '',
+    proyecto:       r.proyecto || '',
+    fotos:          fotoUrlFiltradas
   };
 
   const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
@@ -349,18 +350,19 @@ async function cargarDesdeNube() {
         const fotos = local ? local.fotos : (r.fotos || []);
         const foto  = local ? local.foto  : (fotos[0] || '');
         return {
-          folio:           r.folio,
-          inspector:       r.inspector || '—',
-          area:            r.area,
-          tipo:            r.tipo,
-          nivel:           r.nivel,
-          fecha:           r.fecha,
-          hora:            r.hora,
-          estatus:         r.estatus,
+          folio:            r.folio,
+          supervisor:       r.supervisor || '—',
+          area:             r.area,
+          tipo:             r.tipo,
+          nivel:            r.nivel,
+          fecha:            r.fecha,
+          hora:             r.hora,
+          estatus:          r.estatus,
           fechaAperturaISO: r.fecha_apertura,
-          fechaCierreISO:  r.fecha_cierre || null,
-          diasLimite:      r.dias_limite,
-          notas:           r.notas || '',
+          fechaCierreISO:   r.fecha_cierre || null,
+          diasLimite:       r.dias_limite,
+          notas:            r.notas || '',
+          proyecto:         r.proyecto || '',
           fotos,
           foto
         };
@@ -729,7 +731,7 @@ function guardarOA() {
 
   const nuevo = {
     folio: nuevoFolio,
-    inspector: inspectorActual || '—',
+    supervisor: supervisorActual || '—',
     area: fState.area,
     tipo: tipo,
     nivel: prio.nivel,
@@ -910,8 +912,8 @@ function verDetalle(folio) {
 
   document.getElementById('detalleInfo').innerHTML = `
     <div class="detalle-row">
-      <span class="dr-key">Inspector</span>
-      <span class="dr-val">${r.inspector || '—'}</span>
+      <span class="dr-key">Supervisor</span>
+      <span class="dr-val">${r.supervisor || '—'}</span>
     </div>
     ${r.proyecto ? `
     <div class="detalle-row">
@@ -1104,6 +1106,7 @@ function generarPDF() {
 
         <!-- Tabla de datos -->
         <table style="width:100%;border-collapse:collapse;margin-bottom:24px">
+          ${r.proyecto ? filaTabla('Proyecto', r.proyecto) : ''}
           ${filaTabla('Área', r.area)}
           ${filaTabla('Categoría', r.tipo)}
           ${filaTabla('Comentario', r.notas || '—')}
@@ -1237,7 +1240,7 @@ function _generarExcel() {
       horaInicio,             // B - Hora de inicio
       horaFin,                // C - Hora de finalización
       fechaStr,               // D - Fecha
-      r.inspector || '—',    // E - Correo electrónico (inspector)
+      r.supervisor || '—',    // E - Correo electrónico (supervisor)
       '',                     // F - Columna1
       '—',                    // G - SUPERINTENDENTE
       '—',                    // H - RESPONSABLE
