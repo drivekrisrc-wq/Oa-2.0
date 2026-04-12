@@ -57,10 +57,23 @@ document.addEventListener('keydown', e => {
 
 function actualizarFolioNuevo(val) {
   const tag = document.getElementById('folioTag');
+  const warn = document.getElementById('folioWarn');
   if (val && parseInt(val) > 0) {
-    if (tag) { tag.textContent = 'OA-' + String(parseInt(val)).padStart(4,'0'); tag.style.background = 'var(--blue-soft)'; tag.style.color = 'var(--blue)'; }
+    const folioPropuesto = 'OA-' + String(parseInt(val)).padStart(4,'0');
+    const duplicado = registros.some(r => r.folio === folioPropuesto);
+    if (duplicado) {
+      if (tag) { tag.textContent = '⚠ Ocupado'; tag.style.background = 'rgba(220,38,38,0.12)'; tag.style.color = '#DC2626'; }
+      if (warn) { warn.textContent = folioPropuesto + ' ya está registrado. Elige otro número.'; warn.style.display = 'block'; }
+      document.getElementById('btnGuardar').disabled = true;
+    } else {
+      if (tag) { tag.textContent = folioPropuesto; tag.style.background = 'rgba(0,155,222,0.1)'; tag.style.color = 'var(--blue)'; }
+      if (warn) warn.style.display = 'none';
+      checkForm();
+    }
   } else {
     if (tag) { tag.textContent = 'AUTO'; tag.style.background = ''; tag.style.color = ''; }
+    if (warn) warn.style.display = 'none';
+    checkForm();
   }
 }
 
@@ -717,6 +730,16 @@ function guardarOA() {
   const folioManual = folioInputEl && folioInputEl.value ? parseInt(folioInputEl.value) : null;
   const numFolio = folioManual && folioManual > 0 ? folioManual : folioCounter;
   const nuevoFolio = 'OA-' + String(numFolio).padStart(4,'0');
+
+  // Validar duplicado
+  if (registros.some(r => r.folio === nuevoFolio)) {
+    showToast('<i class="bi bi-exclamation-triangle-fill"></i> ' + nuevoFolio + ' ya existe — cambia el número');
+    const warn = document.getElementById('folioWarn');
+    if (warn) { warn.textContent = nuevoFolio + ' ya está registrado. Elige otro número.'; warn.style.display = 'block'; }
+    const folioInputEl2 = document.getElementById('folioInput');
+    if (folioInputEl2) folioInputEl2.focus();
+    return;
+  }
 
   // Actualizar contador
   if (numFolio >= folioCounter) folioCounter = numFolio + 1;
