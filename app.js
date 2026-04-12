@@ -1228,7 +1228,10 @@ function _generarExcel() {
 
   const filas = [headers];
 
-  registros.forEach((r, i) => {
+  // De más antigua a más nueva
+  const registrosOrdenados = [...registros].reverse();
+
+  registrosOrdenados.forEach((r, i) => {
     const rowNum = i + 2;
     const prio = getPrioridad(r.tipo);
 
