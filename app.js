@@ -1213,17 +1213,18 @@ function _generarExcel() {
 
   // ============ HOJA: BITÁCORA — mismas columnas que el original ============
   // A=FOLIO OA, B=Hora inicio, C=Hora finalización, D=Fecha, E=Correo electrónico,
-  // F=Columna1, G=SUPERINTENDENTE, H=RESPONSABLE, I=ÁREA, J=NUMERO DE PROYECTO,
-  // K=Área, L=Categorías, M=Nivel, N=Días, O=Comentario,
-  // P=Día Esperado de Cierre, Q=Dias Transcurridos, R=Hoy, S=Estatus, T= , U=Tiempo de Cierre
+  // A=FOLIO OA, B=Hora inicio, C=Hora finalización, D=Fecha, E=Supervisor,
+  // F=SUPERINTENDENTE, G=RESPONSABLE, H=ÁREA, I=PROYECTO,
+  // J=Categorías, K=Nivel, L=Días, M=Comentario,
+  // N=Día Esperado de Cierre, O=Dias Transcurridos, P=Hoy, Q=Estatus, R=Fecha Cierre, S=Tiempo de Cierre
 
   const headers = [
     'FOLIO OA','Hora de inicio','Hora de finalización','Fecha',
-    'Correo electrónico','Columna1','SUPERINTENDENTE','RESPONSABLE',
-    'ÁREA ','NUMERO DE PROYECTO','Área','Categorías',
+    'Supervisor','SUPERINTENDENTE','RESPONSABLE',
+    'ÁREA','NUMERO DE PROYECTO','Categorías',
     'Nivel','Días','Comentario Obligatoria "Se detecto ..."',
     'Día Esperado de Cierre','Dias Transcurridos','Hoy',
-    'Estatus',' ','Tiempo de Cierre'
+    'Estatus','Fecha de Cierre','Tiempo de Cierre'
   ];
 
   const filas = [headers];
@@ -1262,38 +1263,36 @@ function _generarExcel() {
     }
 
     filas.push([
-      r.folio || '',          // A - FOLIO OA
-      horaInicio,             // B - Hora de inicio
-      horaFin,                // C - Hora de finalización
-      fechaStr,               // D - Fecha
-      r.supervisor || '—',    // E - Correo electrónico (supervisor)
-      '',                     // F - Columna1
-      '—',                    // G - SUPERINTENDENTE
-      '—',                    // H - RESPONSABLE
-      r.area || '',           // I - ÁREA
-      '—',                    // J - NUMERO DE PROYECTO
-      '—',                    // K - Área funcional
-      r.tipo || '',           // L - Categorías
-      prio.nivel || '—',      // M - Nivel
-      r.diasLimite ?? prio.diasLimite ?? '—',  // N - Días
-      r.notas || '',          // O - Comentario
-      diaEsperado,            // P - Día Esperado de Cierre
-      diasTransc,             // Q - Dias Transcurridos
-      hoy,                    // R - Hoy
-      r.estatus === 'cerrada' ? 'Cerrado' : 'Abierto',  // S - Estatus
-      fechaCierreStr,         // T - (espacio = fecha cierre real)
-      tiempoCierre,           // U - Tiempo de Cierre
+      r.folio || '',                              // A - FOLIO OA
+      horaInicio,                                 // B - Hora de inicio
+      horaFin,                                    // C - Hora de finalización
+      fechaStr,                                   // D - Fecha
+      r.supervisor || '—',                        // E - Supervisor
+      '—',                                        // F - SUPERINTENDENTE
+      '—',                                        // G - RESPONSABLE
+      r.area || '',                               // H - ÁREA
+      r.proyecto || '',                           // I - NUMERO DE PROYECTO
+      r.tipo || '',                               // J - Categorías
+      prio.nivel || '—',                          // K - Nivel
+      r.diasLimite ?? prio.diasLimite ?? '—',     // L - Días
+      r.notas || '',                              // M - Comentario
+      diaEsperado,                                // N - Día Esperado de Cierre
+      diasTransc,                                 // O - Dias Transcurridos
+      hoy,                                        // P - Hoy
+      r.estatus === 'cerrada' ? 'Cerrado' : 'Abierto', // Q - Estatus
+      fechaCierreStr,                             // R - Fecha de Cierre
+      tiempoCierre,                               // S - Tiempo de Cierre
     ]);
   });
 
   const wsBit = XLSX.utils.aoa_to_sheet(filas);
 
-  // Anchos exactos del original
+  // Anchos de columnas
   wsBit['!cols'] = [
-    {wch:11.66},{wch:16},{wch:20.88},{wch:20.88},{wch:19.88},{wch:19.88},
-    {wch:23.10},{wch:20},{wch:23.10},{wch:18.33},{wch:13},{wch:34},
-    {wch:13},{wch:12.55},{wch:32.10},{wch:16.33},{wch:13.33},{wch:11.10},
-    {wch:16.33},{wch:11.44},{wch:15.44}
+    {wch:11.66},{wch:16},{wch:20.88},{wch:20.88},{wch:19.88},
+    {wch:23.10},{wch:20},{wch:23.10},{wch:18.33},{wch:34},
+    {wch:13},{wch:12.55},{wch:32.10},{wch:16.33},{wch:13.33},
+    {wch:11.10},{wch:16.33},{wch:11.44},{wch:15.44}
   ];
 
   // Freeze fila 1
