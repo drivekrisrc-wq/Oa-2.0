@@ -1305,6 +1305,499 @@ function _generarExcel() {
   showToast('<i class="bi bi-file-earmark-excel"></i> Bitácora exportada correctamente');
 }
 
+// =================== REPORTE SEMANAL ===================
+function generarReporteSemanal() {
+  if (!registros || registros.length === 0) {
+    showToast('<i class="bi bi-exclamation-triangle"></i> No hay OAs para generar el reporte');
+    return;
+  }
+
+  // Calcular semana actual (lunes a viernes)
+  const hoy = new Date();
+  const diaSemana = hoy.getDay(); // 0=dom, 1=lun ... 6=sab
+  const diffLunes = diaSemana === 0 ? -6 : 1 - diaSemana;
+  const lunes = new Date(hoy); lunes.setDate(hoy.getDate() + diffLunes); lunes.setHours(0,0,0,0);
+  const viernes = new Date(lunes); viernes.setDate(lunes.getDate() + 4); viernes.setHours(23,59,59,999);
+
+  // Número de semana ISO
+  const semanaNum = (() => {
+    const d = new Date(Date.UTC(hoy.getFullYear(), hoy.getMonth(), hoy.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+  })();
+
+  const fmtFecha = d => d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'});
+  const fmtCorto = d => d.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'});
+
+  // Filtrar OAs para el reporte
+  const oasReporte = registros.filter(r => {
+    const apertura = r.fechaAperturaISO ? new Date(r.fechaAperturaISO) : null;
+    const cierre   = r.fechaCierreISO   ? new Date(r.fechaCierreISO)   : null;
+    if (r.estatus === 'abierta') return true; // todas las abiertas
+    if (r.estatus === 'cerrada' && cierre && cierre >= lunes && cierre <= viernes) return true; // cerradas esta semana
+    return false;
+  });
+
+  // KPIs
+  const total    = registros.length;
+  const cerradas = registros.filter(r => r.estatus === 'cerrada').length;
+  const abiertas = registros.filter(r => r.estatus === 'abierta').length;
+  const diasCierre = registros
+    .filter(r => r.estatus === 'cerrada' && r.fechaAperturaISO && r.fechaCierreISO)
+    .map(r => Math.abs((new Date(r.fechaCierreISO) - new Date(r.fechaAperturaISO)) / 86400000));
+  const promDias = diasCierre.length ? (diasCierre.reduce((a,b)=>a+b,0) / diasCierre.length).toFixed(1) : '—';
+  const pctCerradas = total ? Math.round(cerradas / total * 100) : 0;
+
+  // OAs por mes
+  const porMes = {};
+  registros.forEach(r => {
+    if (!r.fechaAperturaISO) return;
+    const d = new Date(r.fechaAperturaISO);
+    const key = d.toLocaleDateString('es-MX',{month:'short',year:'numeric'});
+    const mes = d.toLocaleDateString('es-MX',{month:'short'});
+    if (!porMes[key]) porMes[key] = {label: mes.charAt(0).toUpperCase()+mes.slice(1), cerradas:0, abiertas:0};
+    if (r.estatus === 'cerrada') porMes[key].cerradas++;
+    else porMes[key].abiertas++;
+  });
+  const meses = Object.values(porMes).slice(-4);
+  const maxMes = Math.max(...meses.map(m => m.cerradas + m.abiertas), 1);
+
+  // Niveles de riesgo
+  const PRIOS = getPrioridad;
+  const niveles = {Bajo:0, Medio:0, Alto:0, Inmediato:0};
+  registros.forEach(r => {
+    const p = getPrioridad(r.tipo);
+    if (p && p.nivel) niveles[p.nivel] = (niveles[p.nivel]||0) + 1;
+  });
+
+  // Categorías — % de cierre por tipo
+  const catMap = {};
+  registros.forEach(r => {
+    if (!catMap[r.tipo]) catMap[r.tipo] = {total:0, cerradas:0};
+    catMap[r.tipo].total++;
+    if (r.estatus === 'cerrada') catMap[r.tipo].cerradas++;
+  });
+  const categorias = Object.entries(catMap)
+    .map(([tipo,v]) => ({tipo, pct: Math.round(v.cerradas/v.total*100)}))
+    .sort((a,b) => b.pct - a.pct);
+
+  // Abreviaturas de categorías
+  const abrevTipo = t => t
+    .replace('Incorrecta Segregación RP','Seg. Residuos RP')
+    .replace('Incorrecta Segregación RME','Seg. Residuos RME')
+    .replace('Incorrecto Almacenaje de Materiales','Almacenaje Incorrecto')
+    .replace('Contaminación al Suelo — DERRAME','Contam. Suelo')
+    .replace('Agotamiento de Recursos — FUGA','Agotamiento / Fugas')
+    .replace('Movimiento de Residuos','Movimiento Residuos');
+
+  // Proyectos — % de cierre
+  const proyMap = {};
+  registros.filter(r => r.proyecto).forEach(r => {
+    const k = r.proyecto;
+    if (!proyMap[k]) proyMap[k] = {total:0, cerradas:0};
+    proyMap[k].total++;
+    if (r.estatus === 'cerrada') proyMap[k].cerradas++;
+  });
+  const proyectos = Object.entries(proyMap)
+    .map(([p,v]) => ({nombre:p, pct: Math.round(v.cerradas/v.total*100)}))
+    .sort((a,b) => b.pct - a.pct)
+    .slice(0,6);
+
+  // Áreas — % de cierre (por grupos de área)
+  const areaMap = {};
+  registros.forEach(r => {
+    const grp = r.area ? r.area.split(' ')[0] : 'Otro';
+    if (!areaMap[grp]) areaMap[grp] = {total:0, cerradas:0};
+    areaMap[grp].total++;
+    if (r.estatus === 'cerrada') areaMap[grp].cerradas++;
+  });
+  const areas = Object.entries(areaMap)
+    .map(([a,v]) => ({nombre:a, pct: Math.round(v.cerradas/v.total*100)}))
+    .sort((a,b) => b.pct - a.pct)
+    .slice(0,5);
+
+  // OAs abiertas agrupadas por supervisor
+  const oasAbiertas = registros.filter(r => r.estatus === 'abierta');
+  const supMap = {};
+  oasAbiertas.forEach(r => {
+    const k = r.supervisor || '—';
+    if (!supMap[k]) supMap[k] = {area: r.area, oas: []};
+    supMap[k].oas.push(r);
+  });
+
+  // Helpers HTML
+  const colorBarra = pct => pct >= 85 ? '#1e7e34' : pct >= 60 ? '#d35400' : '#c0392b';
+  const barraHTML = (nombre, pct) => `
+    <div class="brow">
+      <div class="bname">${nombre}</div>
+      <div class="btrack"><div class="bfill" style="width:${pct}%;background:${colorBarra(pct)}">
+        <span class="bpct">${pct}%</span>
+      </div></div>
+    </div>`;
+
+  const colBarra = pct => pct === 100 ? '#1e7e34' : pct >= 75 ? '#d35400' : '#c0392b';
+  const vBarHTML = (m) => {
+    const tot = m.cerradas + m.abiertas;
+    const hC = tot ? Math.round(m.cerradas/maxMes*70) : 0;
+    const hA = tot ? Math.round(m.abiertas/maxMes*70) : 0;
+    return `<div class="vcol">
+      <div class="vtop">${tot}</div>
+      <div class="vstack">
+        ${hA ? `<div class="vseg" style="height:${hA}px;background:#c0392b;border-radius:3px 3px 0 0"></div>` : ''}
+        ${hC ? `<div class="vseg" style="height:${hC}px;background:#1e7e34;border-radius:${hA?'0':'3px 3px'} 0 0"></div>` : ''}
+      </div>
+      <div class="vbot">${m.label}</div>
+    </div>`;
+  };
+
+  const nivelTag = nivel => {
+    const map = {
+      'Inmediato': 't-inm', 'Alto': 't-alt', 'Medio': 't-med', 'Bajo': 't-bajo'
+    };
+    return map[nivel] || 't-bajo';
+  };
+
+  // Contar niveles por supervisor
+  const supNiveles = (oas) => {
+    const n = {Inmediato:0, Alto:0, Medio:0, Bajo:0};
+    oas.forEach(r => { const p = getPrioridad(r.tipo); if(p) n[p.nivel] = (n[p.nivel]||0)+1; });
+    return Object.entries(n).filter(([,v])=>v>0);
+  };
+
+  // OA vencida?
+  const esVencida = r => {
+    if (r.estatus !== 'abierta' || !r.fechaAperturaISO) return false;
+    const prio = getPrioridad(r.tipo);
+    const diasLim = r.diasLimite ?? prio?.diasLimite ?? 0;
+    const apertura = new Date(r.fechaAperturaISO);
+    const limite = new Date(apertura); limite.setDate(apertura.getDate() + diasLim);
+    return new Date() > limite;
+  };
+
+  const diasTranscurridos = r => {
+    if (!r.fechaAperturaISO) return 0;
+    return Math.floor((new Date() - new Date(r.fechaAperturaISO)) / 86400000);
+  };
+
+  const abrevTipoCorto = t => t
+    .replace('Incorrecta Segregación RP','Seg. Res. RP')
+    .replace('Incorrecta Segregación RME','Seg. Res. RME')
+    .replace('Incorrecto Almacenaje de Materiales','Almacenaje')
+    .replace('Contaminación al Suelo — DERRAME','Contam. Suelo')
+    .replace('Agotamiento de Recursos — FUGA','Agotamiento/Fuga')
+    .replace('Movimiento de Residuos','Mov. Residuos')
+    .replace('Orden y Limpieza','Orden y Limpieza');
+
+  // Tarjetas de superintendentes
+  const supCardsHTML = Object.entries(supMap).map(([sup, {area, oas}]) => {
+    const nvls = supNiveles(oas);
+    const vencidas = oas.filter(r => esVencida(r));
+    const oasListHTML = oas.map(r => {
+      const dias = diasTranscurridos(r);
+      const v = esVencida(r);
+      return `<div class="fitem${v?' vencida':''}">
+        <span class="ftag">${r.folio}</span>
+        <span>${abrevTipoCorto(r.tipo)} · ${fmtCorto(new Date(r.fechaAperturaISO))} · ${dias} día${dias!==1?'s':''}</span>
+      </div>`;
+    }).join('');
+    return `
+    <div class="sup-card">
+      <div class="sup-hdr">
+        <div>
+          <div class="sup-name">${sup}</div>
+          <div class="sup-area">${area}</div>
+        </div>
+        <div class="sup-badge"><div class="sup-badge-num">${oas.length}</div><div class="sup-badge-lbl">OAs</div></div>
+      </div>
+      <div class="sup-body">
+        <div class="ntags">${nvls.map(([n,c])=>`<span class="ntag ${nivelTag(n)}">${n} ${c}</span>`).join('')}</div>
+        ${vencidas.length ? `<div class="venc">⚠ ${vencidas.length} vencida${vencidas.length>1?'s':''}</div>` : ''}
+        <div class="flist">${oasListHTML}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Montar HTML completo
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Dashboard OA S${semanaNum} ${hoy.getFullYear()}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { font-family:'Inter','Helvetica Neue',Arial,sans-serif; background:#F4F5F7; color:#1a1a2e; }
+  .page,.page2 { max-width:900px; margin:32px auto; background:#fff; border-radius:12px; overflow:hidden; box-shadow:0 4px 24px rgba(0,0,0,.10); }
+  .page2 { margin-top:0; margin-bottom:32px; }
+  .hdr { background:#0d3b7a; padding:14px 24px; display:flex; justify-content:space-between; align-items:center; }
+  .hdr-left { display:flex; align-items:center; gap:14px; }
+  .hdr-sep { width:1px; height:34px; background:rgba(255,255,255,.25); }
+  .hdr-title { font-size:13px; font-weight:700; color:#fff; text-transform:uppercase; letter-spacing:.06em; line-height:1.3; }
+  .hdr-right { text-align:right; font-size:10px; color:rgba(255,255,255,.65); line-height:1.7; }
+  .kpi-strip { display:grid; grid-template-columns:repeat(4,1fr); border-bottom:1px solid #eef0f4; }
+  .kpi { padding:16px 20px 14px; border-right:1px solid #eef0f4; position:relative; }
+  .kpi:last-child { border-right:none; }
+  .kpi::after { content:''; position:absolute; bottom:0; left:20px; right:20px; height:3px; border-radius:3px 3px 0 0; }
+  .kpi.blue::after { background:#0d3b7a; } .kpi.green::after { background:#1e7e34; }
+  .kpi.red::after { background:#c0392b; } .kpi.orange::after { background:#d35400; }
+  .kpi-label { font-size:9px; font-weight:600; text-transform:uppercase; letter-spacing:.1em; color:#9aa0b0; margin-bottom:4px; }
+  .kpi-value { font-size:36px; font-weight:700; line-height:1; }
+  .kpi.blue .kpi-value { color:#0d3b7a; } .kpi.green .kpi-value { color:#1e7e34; }
+  .kpi.red .kpi-value { color:#c0392b; } .kpi.orange .kpi-value { color:#d35400; }
+  .kpi-sub { font-size:10px; color:#aab0be; margin-top:4px; }
+  .body { padding:16px; background:#F4F5F7; display:flex; flex-direction:column; gap:12px; }
+  .row { display:grid; gap:12px; }
+  .r-half { grid-template-columns:1fr 1fr; } .r-16 { grid-template-columns:1.6fr 1fr; } .r-13 { grid-template-columns:1fr 2.6fr; }
+  .card { background:#fff; border-radius:8px; overflow:hidden; border:1px solid #eef0f4; }
+  .card-title { font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.1em; color:#9aa0b0; padding:10px 16px 8px; border-bottom:1px solid #f0f2f5; }
+  .bars { padding:10px 16px 12px; display:flex; flex-direction:column; gap:6px; }
+  .brow { display:flex; align-items:center; gap:8px; }
+  .bname { font-size:10px; color:#555e72; width:148px; flex-shrink:0; text-align:right; }
+  .btrack { flex:1; height:16px; background:#f0f2f5; border-radius:4px; overflow:hidden; }
+  .bfill { height:100%; border-radius:4px; display:flex; align-items:center; justify-content:flex-end; padding-right:7px; }
+  .bpct { font-size:10px; font-weight:700; color:#fff; }
+  .donut-wrap { display:flex; align-items:center; justify-content:center; padding:16px 10px; }
+  .donut-rel { position:relative; width:110px; height:110px; }
+  .donut-svg { width:110px; height:110px; }
+  .donut-ctr { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); text-align:center; }
+  .donut-pct { font-size:22px; font-weight:700; color:#1e7e34; line-height:1; }
+  .donut-lbl { font-size:10px; color:#aab0be; margin-top:2px; }
+  .vbars-wrap { padding:10px 20px 12px; }
+  .vbars { display:flex; align-items:flex-end; gap:16px; height:90px; margin-bottom:8px; }
+  .vcol { display:flex; flex-direction:column; align-items:center; flex:1; }
+  .vstack { display:flex; flex-direction:column; align-items:center; gap:1px; width:100%; justify-content:flex-end; height:76px; }
+  .vseg { width:100%; }
+  .vtop { font-size:11px; font-weight:700; color:#333; margin-bottom:2px; }
+  .vbot { font-size:10px; color:#9aa0b0; margin-top:4px; }
+  .vlegend { display:flex; gap:12px; }
+  .vl-dot { width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:3px; vertical-align:middle; }
+  .vl-txt { font-size:9px; color:#9aa0b0; vertical-align:middle; }
+  .niv-grid { display:grid; grid-template-columns:repeat(4,1fr); }
+  .niv { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:14px 6px; text-align:center; border-right:1px solid #f0f2f5; }
+  .niv:last-child { border-right:none; }
+  .niv-lbl { font-size:8px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; margin-bottom:3px; }
+  .niv-num { font-size:32px; font-weight:700; line-height:1; }
+  .niv-pct { font-size:10px; margin-top:3px; }
+  .nb { background:#edfaf1; } .nb .niv-lbl,.nb .niv-pct,.nb .niv-num { color:#1e7e34; }
+  .nm { background:#fff8f0; } .nm .niv-lbl,.nm .niv-pct,.nm .niv-num { color:#d35400; }
+  .na { background:#fdf0f0; } .na .niv-lbl,.na .niv-pct,.na .niv-num { color:#c0392b; }
+  .ni { background:#fdf0f6; } .ni .niv-lbl,.ni .niv-pct,.ni .niv-num { color:#8e1552; }
+  .foot { text-align:center; font-size:9px; color:#c8ccd6; padding:10px 16px 12px; margin-top:4px; }
+  /* Página 2 */
+  .p2-body { padding:20px 24px; }
+  .p2-sec { font-size:11px; font-weight:700; color:#0d3b7a; text-transform:uppercase; letter-spacing:.08em; margin-bottom:4px; }
+  .p2-intro { font-size:10px; color:#8a90a0; margin-bottom:16px; line-height:1.5; }
+  .sup-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .sup-card { border-radius:8px; overflow:hidden; border:1px solid #eef0f4; }
+  .sup-hdr { background:#0d3b7a; color:#fff; padding:10px 14px; display:flex; justify-content:space-between; align-items:center; }
+  .sup-name { font-size:11px; font-weight:700; }
+  .sup-area { font-size:9px; color:rgba(255,255,255,.65); margin-top:2px; }
+  .sup-badge { text-align:center; background:rgba(255,255,255,.15); border-radius:6px; padding:4px 8px; flex-shrink:0; }
+  .sup-badge-num { font-size:18px; font-weight:700; line-height:1; }
+  .sup-badge-lbl { font-size:8px; color:rgba(255,255,255,.7); }
+  .sup-body { padding:10px 12px; display:flex; flex-direction:column; gap:7px; }
+  .ntags { display:flex; flex-wrap:wrap; gap:4px; }
+  .ntag { font-size:9px; font-weight:700; padding:2px 7px; border-radius:4px; }
+  .t-inm { background:#fdf0f6; color:#8e1552; border:1px solid #8e155240; }
+  .t-alt { background:#fdf0f0; color:#c0392b; border:1px solid #c0392b40; }
+  .t-med { background:#fff8f0; color:#d35400; border:1px solid #d3540040; }
+  .t-bajo { background:#edfaf1; color:#1e7e34; border:1px solid #1e7e3440; }
+  .venc { font-size:9px; font-weight:700; color:#c0392b; padding:3px 8px; background:#fdf0f0; border-left:3px solid #c0392b; border-radius:0 4px 4px 0; }
+  .flist { display:flex; flex-direction:column; gap:4px; }
+  .fitem { display:flex; align-items:center; gap:6px; font-size:9px; color:#555e72; padding:3px 0; border-bottom:1px solid #f5f6f8; }
+  .fitem:last-child { border-bottom:none; }
+  .fitem.vencida { background:#fff8f8; border-left:2px solid #c0392b; padding-left:4px; border-radius:0 3px 3px 0; }
+  .ftag { background:#eef0f4; border-radius:3px; padding:1px 5px; font-weight:700; font-size:8px; color:#0d3b7a; flex-shrink:0; }
+  .p2-legend { display:flex; gap:12px; align-items:center; margin-top:16px; flex-wrap:wrap; }
+  .leg-i { display:flex; align-items:center; gap:4px; font-size:9px; color:#555e72; }
+  .leg-sq { width:12px; height:12px; border-radius:2px; flex-shrink:0; }
+  @media print {
+    body { background:#fff; }
+    .page,.page2 { margin:0; box-shadow:none; border-radius:0; page-break-after:always; }
+    .page2 { page-break-after:auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PÁGINA 1 -->
+<div class="page">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-sep"></div>
+      <div class="hdr-title">Dashboard · Observaciones Ambientales ${hoy.getFullYear()}</div>
+    </div>
+    <div class="hdr-right">Corte: ${fmtFecha(hoy)}<br>Bitácora OA · Semana S${semanaNum}</div>
+  </div>
+
+  <div class="kpi-strip">
+    <div class="kpi blue">
+      <div class="kpi-label">Total OAs</div>
+      <div class="kpi-value">${total}</div>
+      <div class="kpi-sub">registradas ${hoy.getFullYear()}</div>
+    </div>
+    <div class="kpi green">
+      <div class="kpi-label">Cerradas</div>
+      <div class="kpi-value">${cerradas}</div>
+      <div class="kpi-sub">${pctCerradas}% del total</div>
+    </div>
+    <div class="kpi red">
+      <div class="kpi-label">Abiertas</div>
+      <div class="kpi-value">${abiertas}</div>
+      <div class="kpi-sub">${100 - pctCerradas}% del total</div>
+    </div>
+    <div class="kpi orange">
+      <div class="kpi-label">Prom. Días</div>
+      <div class="kpi-value">${promDias}</div>
+      <div class="kpi-sub">días promedio cierre</div>
+    </div>
+  </div>
+
+  <div class="body">
+    <div class="row r-16">
+      <!-- Categorías -->
+      <div class="card">
+        <div class="card-title">Categorías de Observación</div>
+        <div class="bars">
+          ${categorias.map(c => barraHTML(abrevTipo(c.tipo), c.pct)).join('')}
+        </div>
+      </div>
+      <!-- Dona -->
+      <div class="card">
+        <div class="card-title">Estatus General</div>
+        <div class="donut-wrap">
+          <div class="donut-rel">
+            <svg class="donut-svg" viewBox="0 0 110 110">
+              <circle cx="55" cy="55" r="42" fill="none" stroke="#eef0f4" stroke-width="13"/>
+              <circle cx="55" cy="55" r="42" fill="none" stroke="#1e7e34" stroke-width="13"
+                stroke-dasharray="${2*Math.PI*42*pctCerradas/100} ${2*Math.PI*42}"
+                stroke-dashoffset="${2*Math.PI*42*0.25}"
+                stroke-linecap="round" transform="rotate(-90 55 55)"/>
+              ${abiertas > 0 ? `<circle cx="55" cy="55" r="42" fill="none" stroke="#c0392b" stroke-width="13"
+                stroke-dasharray="${2*Math.PI*42*(100-pctCerradas)/100} ${2*Math.PI*42}"
+                stroke-dashoffset="${2*Math.PI*42*(1 - pctCerradas/100 + 0.25)}"
+                stroke-linecap="round" transform="rotate(-90 55 55)"/>` : ''}
+            </svg>
+            <div class="donut-ctr">
+              <div class="donut-pct">${pctCerradas}%</div>
+              <div class="donut-lbl">cerradas</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="row r-13">
+      <!-- Barras verticales por mes -->
+      <div class="card">
+        <div class="card-title">OAs por Mes</div>
+        <div class="vbars-wrap">
+          <div class="vbars">
+            ${meses.map(m => vBarHTML(m)).join('')}
+          </div>
+          <div class="vlegend">
+            <div><span class="vl-dot" style="background:#1e7e34"></span><span class="vl-txt">Cerradas</span></div>
+            <div><span class="vl-dot" style="background:#c0392b"></span><span class="vl-txt">Abiertas</span></div>
+          </div>
+        </div>
+      </div>
+      <!-- Niveles de riesgo -->
+      <div class="card">
+        <div class="card-title">Nivel de Riesgo</div>
+        <div class="niv-grid">
+          <div class="niv nb">
+            <div class="niv-lbl">Bajo</div>
+            <div class="niv-num">${niveles.Bajo||0}</div>
+            <div class="niv-pct">${total ? Math.round((niveles.Bajo||0)/total*100) : 0}%</div>
+          </div>
+          <div class="niv nm">
+            <div class="niv-lbl">Medio</div>
+            <div class="niv-num">${niveles.Medio||0}</div>
+            <div class="niv-pct">${total ? Math.round((niveles.Medio||0)/total*100) : 0}%</div>
+          </div>
+          <div class="niv na">
+            <div class="niv-lbl">Alto</div>
+            <div class="niv-num">${niveles.Alto||0}</div>
+            <div class="niv-pct">${total ? Math.round((niveles.Alto||0)/total*100) : 0}%</div>
+          </div>
+          <div class="niv ni">
+            <div class="niv-lbl">Inmediato</div>
+            <div class="niv-num">${niveles.Inmediato||0}</div>
+            <div class="niv-pct">${total ? Math.round((niveles.Inmediato||0)/total*100) : 0}%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${proyectos.length || areas.length ? `
+    <div class="row r-half">
+      ${proyectos.length ? `
+      <div class="card">
+        <div class="card-title">Proyectos / Buques</div>
+        <div class="bars">
+          ${proyectos.map(p => barraHTML(p.nombre, p.pct)).join('')}
+        </div>
+      </div>` : ''}
+      ${areas.length ? `
+      <div class="card">
+        <div class="card-title">Áreas</div>
+        <div class="bars">
+          ${areas.map(a => barraHTML(a.nombre, a.pct)).join('')}
+        </div>
+      </div>` : ''}
+    </div>` : ''}
+  </div>
+
+  <div class="foot">Sistema de Gestión Ambiental &nbsp;·&nbsp; Semana S${semanaNum} &nbsp;·&nbsp; Generado el ${fmtFecha(hoy)}</div>
+</div>
+
+<!-- PÁGINA 2 -->
+<div class="page2">
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="hdr-sep"></div>
+      <div class="hdr-title">Dashboard · Observaciones Ambientales ${hoy.getFullYear()}</div>
+    </div>
+    <div class="hdr-right">Corte: ${fmtFecha(hoy)}<br>Bitácora OA · Semana S${semanaNum}</div>
+  </div>
+
+  <div class="p2-body">
+    <div class="p2-sec">OAs Abiertas — Seguimiento por Supervisor</div>
+    <div class="p2-intro">Resumen de observaciones pendientes de cierre agrupadas por supervisor responsable.</div>
+    ${oasAbiertas.length === 0
+      ? `<div style="text-align:center;padding:40px;color:#1e7e34;font-weight:700;font-size:14px">✅ No hay OAs abiertas esta semana</div>`
+      : `<div class="sup-grid">${supCardsHTML}</div>`
+    }
+    <div class="p2-legend">
+      <div class="leg-i"><div class="leg-sq" style="background:#fdf0f6;border:1px solid #8e1552;"></div><span style="color:#8e1552;font-weight:600;">Inmediato</span></div>
+      <div class="leg-i"><div class="leg-sq" style="background:#fdf0f0;border:1px solid #c0392b;"></div><span style="color:#c0392b;font-weight:600;">Alto</span></div>
+      <div class="leg-i"><div class="leg-sq" style="background:#fff8f0;border:1px solid #d35400;"></div><span style="color:#d35400;font-weight:600;">Medio</span></div>
+      <div class="leg-i"><div class="leg-sq" style="background:#edfaf1;border:1px solid #1e7e34;"></div><span style="color:#1e7e34;font-weight:600;">Bajo</span></div>
+      <div class="leg-i" style="margin-left:auto;">
+        <div class="leg-sq" style="background:#fff8f8;border-left:3px solid #c0392b;border-radius:0 2px 2px 0;"></div>
+        <span>Fecha de cierre vencida</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="foot">Sistema de Gestión Ambiental &nbsp;·&nbsp; Semana S${semanaNum} &nbsp;·&nbsp; Generado el ${fmtFecha(hoy)}</div>
+</div>
+
+<script>window.print();</script>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    showToast('<i class="bi bi-exclamation-triangle-fill"></i> Permite ventanas emergentes para generar el reporte');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+}
+
 // =================== TOAST ===================
 function showToast(msg) {
   const t = document.getElementById('toast');
