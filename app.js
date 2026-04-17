@@ -56,23 +56,24 @@ document.addEventListener('keydown', e => {
 });
 
 function actualizarFolioNuevo(val) {
-  const tag = document.getElementById('folioTag');
+  const tag  = document.getElementById('folioTag');
   const warn = document.getElementById('folioWarn');
   if (val && parseInt(val) > 0) {
     const folioPropuesto = 'OA-' + String(parseInt(val)).padStart(4,'0');
+    // Verificar solo contra registros que existen actualmente en memoria
     const duplicado = registros.some(r => r.folio === folioPropuesto);
     if (duplicado) {
-      if (tag) { tag.textContent = '⚠ Ocupado'; tag.style.background = 'rgba(220,38,38,0.12)'; tag.style.color = '#DC2626'; }
-      if (warn) { warn.textContent = folioPropuesto + ' ya está registrado. Elige otro número.'; warn.style.display = 'block'; }
+      if (tag)  { tag.textContent = '⚠ Ocupado'; tag.style.background = 'rgba(220,38,38,0.12)'; tag.style.color = '#DC2626'; }
+      if (warn) { warn.textContent = folioPropuesto + ' ya está en uso. Elige otro número.'; warn.style.display = 'block'; }
       document.getElementById('btnGuardar').disabled = true;
     } else {
-      if (tag) { tag.textContent = folioPropuesto; tag.style.background = 'rgba(0,155,222,0.1)'; tag.style.color = 'var(--blue)'; }
-      if (warn) warn.style.display = 'none';
+      if (tag)  { tag.textContent = folioPropuesto; tag.style.background = 'rgba(0,155,222,0.1)'; tag.style.color = 'var(--blue)'; }
+      if (warn) { warn.style.display = 'none'; }
       checkForm();
     }
   } else {
-    if (tag) { tag.textContent = 'AUTO'; tag.style.background = ''; tag.style.color = ''; }
-    if (warn) warn.style.display = 'none';
+    if (tag)  { tag.textContent = 'AUTO'; tag.style.background = ''; tag.style.color = ''; }
+    if (warn) { warn.style.display = 'none'; }
     checkForm();
   }
 }
@@ -802,6 +803,9 @@ function resetNuevo() {
   if (fi) { fi.value=''; fi.placeholder=String(folioCounter).padStart(4,'0'); }
   const ft = document.getElementById('folioTag');
   if (ft) { ft.textContent='AUTO'; ft.style.background=''; ft.style.color=''; }
+  // Limpiar advertencia de folio duplicado
+  const fw = document.getElementById('folioWarn');
+  if (fw) { fw.style.display='none'; fw.textContent=''; }
   const pi = document.getElementById('proyectoInput');
   if (pi) pi.value='';
   const cp = document.getElementById('chkProyecto');
