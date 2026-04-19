@@ -207,6 +207,7 @@ function guardarEdicion() {
 
   guardarEnStorage();
   sincronizarNube();
+  sincronizarSheets();
   showToast('<i class="bi bi-check-lg"></i> OA actualizada correctamente');
   currentDetalle = reg;
 
@@ -267,15 +268,13 @@ async function subirFoto(base64, folio, idx) {
 
 // Sincronizar una OA a Supabase (upsert)
 async function sincronizarOA(r) {
-  // Separar fotos: las que son base64 hay que subirlas, las que ya son URLs se quedan
-  const fotosResultantes = await Promise.all(
-    (r.fotos || []).map((f, i) => {
-      if (!f || f.length === 0) return Promise.resolve(null);
-      if (f.startsWith('data:image')) return subirFoto(f, r.folio, i); // subir
-      return Promise.resolve(f); // ya es URL, conservar
-    })
+  // Subir fotos que sean base64 y reemplazar por URLs
+  const fotosUrls = await Promise.all(
+    (r.fotos || []).map((f, i) =>
+      f && f.startsWith('data:image') ? subirFoto(f, r.folio, i) : Promise.resolve(f)
+    )
   );
-  const fotosFinales = fotosResultantes.filter(Boolean);
+  const fotoUrlFiltradas = fotosUrls.filter(Boolean);
 
   const payload = {
     folio:          r.folio,
@@ -291,7 +290,7 @@ async function sincronizarOA(r) {
     dias_limite:    r.diasLimite ?? null,
     notas:          r.notas || '',
     proyecto:       r.proyecto || '',
-    fotos:          fotosFinales
+    fotos:          fotoUrlFiltradas
   };
 
   const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
@@ -314,11 +313,10 @@ async function sincronizarOA(r) {
     });
   }
 
-  // Actualizar URLs en el registro local si se subieron fotos nuevas
-  const hayBase64 = (r.fotos || []).some(f => f && f.startsWith('data:image'));
-  if (hayBase64 && fotosFinales.length > 0) {
-    r.fotos = fotosFinales;
-    r.foto  = fotosFinales[0];
+  // Actualizar URLs en el registro local
+  if (fotoUrlFiltradas.length > 0) {
+    r.fotos = fotoUrlFiltradas;
+    r.foto  = fotoUrlFiltradas[0];
     guardarEnStorage();
   }
 }
@@ -351,14 +349,11 @@ async function cargarDesdeNube() {
     const data = await resp.json();
     if (!data || data.length === 0) { mostrarSyncStatus('ok'); return false; }
 
-    // Mapa de fotos locales — guardar TODAS las fotos (base64 Y URLs de Supabase)
+    // Mapa de fotos locales base64 para no perderlas
     const fotosLocales = {};
     registros.forEach(r => {
-      const fotos = (r.fotos || []).filter(f => f && f.length > 0);
-      const foto  = r.foto || '';
-      if (fotos.length || foto) {
-        fotosLocales[r.folio] = { fotos, foto };
-      }
+      const b64 = (r.fotos || []).filter(f => f && f.startsWith('data:image'));
+      if (b64.length) fotosLocales[r.folio] = { fotos: r.fotos, foto: r.foto };
     });
 
     const foliosNube = new Set(data.map(r => r.folio));
@@ -366,14 +361,9 @@ async function cargarDesdeNube() {
 
     registros = [
       ...data.map(r => {
-        // Prioridad: fotos del local (más completas) > fotos de la nube
-        const localFotos = fotosLocales[r.folio];
-        const fotosNube  = (r.fotos || []).filter(f => f && f.length > 0);
-
-        // Usar locales si existen, si no usar las de la nube
-        const fotos = localFotos ? localFotos.fotos : fotosNube;
-        const foto  = localFotos ? localFotos.foto  : (fotosNube[0] || '');
-
+        const local = fotosLocales[r.folio];
+        const fotos = local ? local.fotos : (r.fotos || []);
+        const foto  = local ? local.foto  : (fotos[0] || '');
         return {
           folio:            r.folio,
           supervisor:       r.supervisor || '—',
@@ -785,6 +775,7 @@ function guardarOA() {
   registros.unshift(nuevo);
   guardarEnStorage();
   sincronizarNube();
+  sincronizarSheets();
   updateStats();
   showToast('<i class="bi bi-check-lg"></i> OA ' + nuevoFolio + ' registrada correctamente');
 
@@ -920,6 +911,7 @@ function eliminarOA(folio) {
   registros = registros.filter(r => r.folio !== folio);
   guardarEnStorage();
   eliminarDeNube(folio);
+  sincronizarSheets();
   updateStats();
   renderRegistros();
   showToast('<i class="bi bi-trash3"></i> OA ' + folio + ' eliminada');
@@ -1047,6 +1039,7 @@ function guardarEstatus() {
   }
   guardarEnStorage();
   sincronizarNube();
+  sincronizarSheets();
   updateStats();
   showToast('<i class="bi bi-check-lg"></i> Estatus actualizado a: ' + (nuevoEstatus==='abierta'?'Abierta':'Cerrada'));
   setTimeout(()=>goBack('screenDetalle','screenPasados'),900);
@@ -1811,6 +1804,48 @@ function generarReporteSemanal() {
   }
   win.document.write(html);
   win.document.close();
+}
+
+// =================== GOOGLE SHEETS SYNC ===================
+const GS_URL = 'https://script.google.com/macros/s/AKfycbwDcUe0r5JrLOqxruRItESlDeBf5YqETUaH-J7wsCqGBwAIJ8-SYVw905-Lxa0JXJctMQ/exec';
+
+function sincronizarSheets() {
+  try {
+    const payload = JSON.stringify({
+      action: 'sync',
+      registros: registros.map(r => ({
+        folio:           r.folio,
+        supervisor:      r.supervisor || '—',
+        area:            r.area,
+        tipo:            r.tipo,
+        nivel:           r.nivel || '',
+        fecha:           r.fecha,
+        hora:            r.hora,
+        estatus:         r.estatus,
+        fechaAperturaISO: r.fechaAperturaISO || '',
+        fechaCierreISO:  r.fechaCierreISO   || '',
+        diasLimite:      r.diasLimite ?? '',
+        notas:           r.notas || '',
+        proyecto:        r.proyecto || ''
+      }))
+    });
+
+    // JSONP — no bloquea la UI y evita CORS
+    const id = 'gs_' + Date.now();
+    const s  = document.createElement('script');
+    window[id] = d => {
+      delete window[id];
+      if (s.parentNode) s.parentNode.removeChild(s);
+      if (d && d.status === 'ok') {
+        console.log('Sheets actualizado:', d.total, 'registros');
+      }
+    };
+    s.onerror = () => { delete window[id]; if (s.parentNode) s.parentNode.removeChild(s); };
+    s.src = GS_URL + '?callback=' + id + '&payload=' + encodeURIComponent(payload) + '&t=' + Date.now();
+    document.head.appendChild(s);
+  } catch(e) {
+    console.warn('Error sincronizando Sheets:', e);
+  }
 }
 
 // =================== TOAST ===================
