@@ -267,13 +267,15 @@ async function subirFoto(base64, folio, idx) {
 
 // Sincronizar una OA a Supabase (upsert)
 async function sincronizarOA(r) {
-  // Subir fotos que sean base64 y reemplazar por URLs
-  const fotosUrls = await Promise.all(
-    (r.fotos || []).map((f, i) =>
-      f && f.startsWith('data:image') ? subirFoto(f, r.folio, i) : Promise.resolve(f)
-    )
+  // Separar fotos: las que son base64 hay que subirlas, las que ya son URLs se quedan
+  const fotosResultantes = await Promise.all(
+    (r.fotos || []).map((f, i) => {
+      if (!f || f.length === 0) return Promise.resolve(null);
+      if (f.startsWith('data:image')) return subirFoto(f, r.folio, i); // subir
+      return Promise.resolve(f); // ya es URL, conservar
+    })
   );
-  const fotoUrlFiltradas = fotosUrls.filter(Boolean);
+  const fotosFinales = fotosResultantes.filter(Boolean);
 
   const payload = {
     folio:          r.folio,
@@ -289,7 +291,7 @@ async function sincronizarOA(r) {
     dias_limite:    r.diasLimite ?? null,
     notas:          r.notas || '',
     proyecto:       r.proyecto || '',
-    fotos:          fotoUrlFiltradas
+    fotos:          fotosFinales
   };
 
   const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
@@ -312,10 +314,11 @@ async function sincronizarOA(r) {
     });
   }
 
-  // Actualizar URLs en el registro local
-  if (fotoUrlFiltradas.length > 0) {
-    r.fotos = fotoUrlFiltradas;
-    r.foto  = fotoUrlFiltradas[0];
+  // Actualizar URLs en el registro local si se subieron fotos nuevas
+  const hayBase64 = (r.fotos || []).some(f => f && f.startsWith('data:image'));
+  if (hayBase64 && fotosFinales.length > 0) {
+    r.fotos = fotosFinales;
+    r.foto  = fotosFinales[0];
     guardarEnStorage();
   }
 }
@@ -348,11 +351,14 @@ async function cargarDesdeNube() {
     const data = await resp.json();
     if (!data || data.length === 0) { mostrarSyncStatus('ok'); return false; }
 
-    // Mapa de fotos locales base64 para no perderlas
+    // Mapa de fotos locales — guardar TODAS las fotos (base64 Y URLs de Supabase)
     const fotosLocales = {};
     registros.forEach(r => {
-      const b64 = (r.fotos || []).filter(f => f && f.startsWith('data:image'));
-      if (b64.length) fotosLocales[r.folio] = { fotos: r.fotos, foto: r.foto };
+      const fotos = (r.fotos || []).filter(f => f && f.length > 0);
+      const foto  = r.foto || '';
+      if (fotos.length || foto) {
+        fotosLocales[r.folio] = { fotos, foto };
+      }
     });
 
     const foliosNube = new Set(data.map(r => r.folio));
@@ -360,9 +366,14 @@ async function cargarDesdeNube() {
 
     registros = [
       ...data.map(r => {
-        const local = fotosLocales[r.folio];
-        const fotos = local ? local.fotos : (r.fotos || []);
-        const foto  = local ? local.foto  : (fotos[0] || '');
+        // Prioridad: fotos del local (más completas) > fotos de la nube
+        const localFotos = fotosLocales[r.folio];
+        const fotosNube  = (r.fotos || []).filter(f => f && f.length > 0);
+
+        // Usar locales si existen, si no usar las de la nube
+        const fotos = localFotos ? localFotos.fotos : fotosNube;
+        const foto  = localFotos ? localFotos.foto  : (fotosNube[0] || '');
+
         return {
           folio:            r.folio,
           supervisor:       r.supervisor || '—',
