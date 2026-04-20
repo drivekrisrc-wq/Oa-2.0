@@ -1811,38 +1811,52 @@ const GS_URL = 'https://script.google.com/macros/s/AKfycbwDcUe0r5JrLOqxruRItESlD
 
 function sincronizarSheets() {
   try {
-    const payload = JSON.stringify({
-      action: 'sync',
-      registros: registros.map(r => ({
-        folio:           r.folio,
-        supervisor:      r.supervisor || '—',
-        area:            r.area,
-        tipo:            r.tipo,
-        nivel:           r.nivel || '',
-        fecha:           r.fecha,
-        hora:            r.hora,
-        estatus:         r.estatus,
-        fechaAperturaISO: r.fechaAperturaISO || '',
-        fechaCierreISO:  r.fechaCierreISO   || '',
-        diasLimite:      r.diasLimite ?? '',
-        notas:           r.notas || '',
-        proyecto:        r.proyecto || ''
-      }))
-    });
+    const datos = registros.map(r => ({
+      folio:            r.folio,
+      supervisor:       r.supervisor || '—',
+      area:             r.area,
+      tipo:             r.tipo,
+      nivel:            r.nivel || '',
+      fecha:            r.fecha,
+      hora:             r.hora,
+      estatus:          r.estatus,
+      fechaAperturaISO: r.fechaAperturaISO || '',
+      fechaCierreISO:   r.fechaCierreISO   || '',
+      diasLimite:       r.diasLimite ?? '',
+      notas:            r.notas || '',
+      proyecto:         r.proyecto || ''
+    }));
 
-    // JSONP — no bloquea la UI y evita CORS
-    const id = 'gs_' + Date.now();
-    const s  = document.createElement('script');
-    window[id] = d => {
-      delete window[id];
-      if (s.parentNode) s.parentNode.removeChild(s);
-      if (d && d.status === 'ok') {
-        console.log('Sheets actualizado:', d.total, 'registros');
-      }
-    };
-    s.onerror = () => { delete window[id]; if (s.parentNode) s.parentNode.removeChild(s); };
-    s.src = GS_URL + '?callback=' + id + '&payload=' + encodeURIComponent(payload) + '&t=' + Date.now();
-    document.head.appendChild(s);
+    const payload = JSON.stringify({ action: 'sync', registros: datos });
+
+    // Usar iframe + form para evitar CORS y límites de URL
+    const iframeId = 'gs_iframe_' + Date.now();
+    const iframe = document.createElement('iframe');
+    iframe.name = iframeId;
+    iframe.style.display = 'none';
+    document.body.appendChild(iframe);
+
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = GS_URL;
+    form.target = iframeId;
+    form.style.display = 'none';
+
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'payload';
+    input.value = payload;
+    form.appendChild(input);
+
+    document.body.appendChild(form);
+    form.submit();
+
+    // Limpiar después de enviar
+    setTimeout(() => {
+      if (form.parentNode) form.parentNode.removeChild(form);
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    }, 5000);
+
   } catch(e) {
     console.warn('Error sincronizando Sheets:', e);
   }
@@ -1860,4 +1874,6 @@ function showToast(msg) {
 updateStats();
 cargarDesdeNube().then(cargado => {
   if (cargado) { renderRegistros(); updateStats(); }
+  // Sincronizar todas las OAs actuales con Google Sheets al arrancar
+  sincronizarSheets();
 });
