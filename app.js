@@ -82,6 +82,11 @@ function actualizarProyecto(val) {
   const chk = document.getElementById('chkProyecto');
   if (chk) chk.classList.toggle('on', val && val.length === 4);
 }
+
+function actualizarDepto(val) {
+  const chk = document.getElementById('chkDepto');
+  if (chk) chk.classList.toggle('on', val && val.length > 0);
+}
 let supervisorActual = null;
 
 function selResponsable(siglas) {
@@ -119,6 +124,10 @@ function abrirEditar() {
     // Precargar proyecto
     const proyEl = document.getElementById('editProyectoInput');
     if (proyEl) proyEl.value = r.proyecto ? r.proyecto.replace('R-','') : '';
+
+    // Precargar departamento
+    const deptoEl = document.getElementById('editDeptoInput');
+    if (deptoEl) deptoEl.value = r.departamento || '';
 
     // Marcar área
     document.querySelectorAll('#editAreaList .area-list-item').forEach(el => {
@@ -194,6 +203,10 @@ function guardarEdicion() {
   if (proyEl) {
     reg.proyecto = proyEl.value ? 'R-' + proyEl.value : '';
   }
+
+  // Departamento responsable
+  const deptoEl2 = document.getElementById('editDeptoInput');
+  if (deptoEl2) reg.departamento = deptoEl2.value || '';
 
   const notasVal = document.getElementById('editNotasTa')?.value || '';
   if (editState.area) reg.area = editState.area;
@@ -290,6 +303,7 @@ async function sincronizarOA(r) {
     dias_limite:    r.diasLimite ?? null,
     notas:          r.notas || '',
     proyecto:       r.proyecto || '',
+    departamento:   r.departamento || '',
     fotos:          fotoUrlFiltradas
   };
 
@@ -378,6 +392,7 @@ async function cargarDesdeNube() {
           diasLimite:       r.dias_limite,
           notas:            r.notas || '',
           proyecto:         r.proyecto || '',
+          departamento:     r.departamento || '',
           fotos,
           foto
         };
@@ -751,6 +766,10 @@ function guardarOA() {
   const proyEl = document.getElementById('proyectoInput');
   const proyecto = proyEl && proyEl.value && proyEl.value.length === 4 ? 'R-' + proyEl.value : '';
 
+  // Departamento responsable
+  const deptoEl = document.getElementById('deptoInput');
+  const departamento = deptoEl ? deptoEl.value : '';
+
   const tipo = fState.inc;
   const prio = getPrioridad(tipo);
 
@@ -762,6 +781,7 @@ function guardarOA() {
     nivel: prio.nivel,
     diasLimite: prio.diasLimite,
     proyecto: proyecto,
+    departamento: departamento,
     fechaAperturaISO: now.toISOString(),
     fecha: now.toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'}),
     hora: now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}),
@@ -812,6 +832,10 @@ function resetNuevo() {
   if (pi) pi.value='';
   const cp = document.getElementById('chkProyecto');
   if (cp) cp.classList.remove('on');
+  const di = document.getElementById('deptoInput');
+  if (di) di.value='';
+  const cd = document.getElementById('chkDepto');
+  if (cd) cd.classList.remove('on');
   filterAreas('');
   ['chk2','chk3','chk4','chk5'].forEach(id=>document.getElementById(id).classList.remove('on'));
   ['fc3','fc4','fc5'].forEach(id=>document.getElementById(id).classList.add('locked'));
@@ -949,6 +973,11 @@ function verDetalle(folio) {
     <div class="detalle-row">
       <span class="dr-key">Proyecto</span>
       <span class="dr-val" style="font-family:'Barlow Condensed',sans-serif;font-size:15px;font-weight:700;color:var(--blue)">${r.proyecto}</span>
+    </div>` : ''}
+    ${r.departamento ? `
+    <div class="detalle-row">
+      <span class="dr-key">Depto. Responsable</span>
+      <span class="dr-val">${r.departamento}</span>
     </div>` : ''}
     <div class="detalle-row">
       <span class="dr-key">Área</span>
@@ -1824,12 +1853,12 @@ function sincronizarSheets() {
       fechaCierreISO:   r.fechaCierreISO   || '',
       diasLimite:       r.diasLimite ?? '',
       notas:            r.notas || '',
-      proyecto:         r.proyecto || ''
+      proyecto:         r.proyecto || '',
+      departamento:     r.departamento || ''
     }));
 
     const payload = JSON.stringify({ action: 'sync', registros: datos });
 
-    // Usar iframe + form para evitar CORS y límites de URL
     const iframeId = 'gs_iframe_' + Date.now();
     const iframe = document.createElement('iframe');
     iframe.name = iframeId;
@@ -1851,7 +1880,6 @@ function sincronizarSheets() {
     document.body.appendChild(form);
     form.submit();
 
-    // Limpiar después de enviar
     setTimeout(() => {
       if (form.parentNode) form.parentNode.removeChild(form);
       if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
@@ -1874,6 +1902,5 @@ function showToast(msg) {
 updateStats();
 cargarDesdeNube().then(cargado => {
   if (cargado) { renderRegistros(); updateStats(); }
-  // Sincronizar todas las OAs actuales con Google Sheets al arrancar
   sincronizarSheets();
 });
