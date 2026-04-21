@@ -213,6 +213,41 @@
             </div>
           </div>
 
+          <!-- Departamento Responsable -->
+          <div class="fcard" id="efc_depto">
+            <div class="fcard-head">
+              <div class="fcard-icon navy"><i class="bi bi-people-fill" style="color:#002b66"></i></div>
+              <div class="fcard-title">Departamento Responsable <span style="font-size:11px;font-weight:400;color:var(--mid)">(Opcional)</span></div>
+            </div>
+            <div class="fcard-body">
+              <select id="editDeptoInput"
+                style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:12px;background:var(--light);font-family:'Barlow',sans-serif;font-size:15px;font-weight:600;color:var(--navy);outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;">
+                <option value="">— Selecciona un departamento —</option>
+                <option>Infraestructura</option>
+                <option>Elaboración</option>
+                <option>SOS</option>
+                <option>Soldadura</option>
+                <option>RRHH</option>
+                <option>Mantenimiento-Mec</option>
+                <option>Mantenimiento-Admi</option>
+                <option>Mantenimiento-Elec</option>
+                <option>Mantenimiento-Cab</option>
+                <option>Maniobras</option>
+                <option>Tuberos</option>
+                <option>Pañol Central</option>
+                <option>Almacén</option>
+                <option>Maquinado</option>
+                <option>Servicios</option>
+                <option>Mecanicos</option>
+                <option>PA</option>
+                <option>Recubrimientos</option>
+                <option>Dockmaster</option>
+                <option>Paileria</option>
+                <option>Andamios</option>
+              </select>
+            </div>
+          </div>
+
           <!-- Área -->
           <div class="fcard" id="efc2">
             <div class="fcard-head">
@@ -351,6 +386,43 @@
                   oninput="actualizarProyecto(this.value)">
               </div>
               <div style="font-size:11px;color:var(--mid);margin-top:6px;">Ejemplo: R-1935</div>
+            </div>
+          </div>
+
+          <!-- Departamento Responsable -->
+          <div class="fcard" id="fcDepto">
+            <div class="fcard-head">
+              <div class="fcard-icon navy"><i class="bi bi-people-fill" style="color:#002b66"></i></div>
+              <div class="fcard-title">Departamento Responsable <span style="font-size:11px;font-weight:400;color:var(--mid)">(Opcional)</span></div>
+              <div class="fcard-check" id="chkDepto"><i class="bi bi-check-lg"></i></div>
+            </div>
+            <div class="fcard-body">
+              <select id="deptoInput" onchange="actualizarDepto(this.value)"
+                style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:12px;background:var(--light);font-family:'Barlow',sans-serif;font-size:15px;font-weight:600;color:var(--navy);outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;">
+                <option value="">— Selecciona un departamento —</option>
+                <option>Infraestructura</option>
+                <option>Elaboración</option>
+                <option>SOS</option>
+                <option>Soldadura</option>
+                <option>RRHH</option>
+                <option>Mantenimiento-Mec</option>
+                <option>Mantenimiento-Admi</option>
+                <option>Mantenimiento-Elec</option>
+                <option>Mantenimiento-Cab</option>
+                <option>Maniobras</option>
+                <option>Tuberos</option>
+                <option>Pañol Central</option>
+                <option>Almacén</option>
+                <option>Maquinado</option>
+                <option>Servicios</option>
+                <option>Mecanicos</option>
+                <option>PA</option>
+                <option>Recubrimientos</option>
+                <option>Dockmaster</option>
+                <option>Paileria</option>
+                <option>Andamios</option>
+              </select>
+              <div style="font-size:11px;color:var(--mid);margin-top:6px;">Área responsable del incumplimiento</div>
             </div>
           </div>
 
