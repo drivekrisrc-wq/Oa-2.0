@@ -281,17 +281,13 @@ async function subirFoto(base64, folio, idx) {
 
 // Sincronizar una OA a Supabase (upsert)
 async function sincronizarOA(r) {
-  // Subir solo las fotos que sean base64, conservar las que ya son URLs
-  const fotosResultantes = await Promise.all(
-    (r.fotos || []).map((f, i) => {
-      if (!f || f.length === 0) return Promise.resolve(null);
-      if (f.startsWith('data:image')) return subirFoto(f, r.folio, i);
-      // Ya es URL — verificar que pertenece a este folio
-      if (f.includes('/fotos-oa/')) return Promise.resolve(f);
-      return Promise.resolve(null);
-    })
+  // Subir fotos que sean base64 y reemplazar por URLs
+  const fotosUrls = await Promise.all(
+    (r.fotos || []).map((f, i) =>
+      f && f.startsWith('data:image') ? subirFoto(f, r.folio, i) : Promise.resolve(f)
+    )
   );
-  const fotosFinales = fotosResultantes.filter(Boolean);
+  const fotoUrlFiltradas = fotosUrls.filter(Boolean);
 
   const payload = {
     folio:          r.folio,
@@ -308,7 +304,7 @@ async function sincronizarOA(r) {
     notas:          r.notas || '',
     proyecto:       r.proyecto || '',
     departamento:   r.departamento || '',
-    fotos:          fotosFinales
+    fotos:          fotoUrlFiltradas
   };
 
   const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
@@ -331,11 +327,10 @@ async function sincronizarOA(r) {
     });
   }
 
-  // Actualizar URLs en el registro local si se subieron fotos nuevas
-  const hayBase64 = (r.fotos || []).some(f => f && f.startsWith('data:image'));
-  if (hayBase64 && fotosFinales.length > 0) {
-    r.fotos = fotosFinales;
-    r.foto  = fotosFinales[0];
+  // Actualizar URLs en el registro local
+  if (fotoUrlFiltradas.length > 0) {
+    r.fotos = fotoUrlFiltradas;
+    r.foto  = fotoUrlFiltradas[0];
     guardarEnStorage();
   }
 }
@@ -366,62 +361,44 @@ async function cargarDesdeNube() {
     );
     if (!resp.ok) { mostrarSyncStatus('offline'); return false; }
     const data = await resp.json();
+    if (!data || data.length === 0) { mostrarSyncStatus('ok'); return false; }
 
-    // Mapa de fotos locales — guardar TODAS (base64 Y URLs) por folio
+    // Mapa de fotos locales base64 para no perderlas
     const fotosLocales = {};
     registros.forEach(r => {
-      const fotos = (r.fotos || []).filter(f => f && f.length > 0);
-      if (fotos.length || r.foto) {
-        fotosLocales[r.folio] = { fotos, foto: r.foto || '' };
-      }
+      const b64 = (r.fotos || []).filter(f => f && f.startsWith('data:image'));
+      if (b64.length) fotosLocales[r.folio] = { fotos: r.fotos, foto: r.foto };
     });
 
-    if (!data || data.length === 0) {
-      // Si Supabase devuelve vacío, limpiar registros locales también
-      registros = [];
-      guardarEnStorage();
-      updateStats();
-      mostrarSyncStatus('ok');
-      return false;
-    }
-
-    // Supabase es la fuente de verdad — solo usar lo que viene de la nube
-    // NO agregar soloLocales porque eso incluye OAs ya eliminadas
     const foliosNube = new Set(data.map(r => r.folio));
+    const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
 
-    registros = data.map(r => {
-      // Restaurar fotos desde local si existen (pueden ser base64 o URLs)
-      const local = fotosLocales[r.fotosLocales] || fotosLocales[r.folio];
-      const fotosNube = (r.fotos || []).filter(f => f && f.length > 0);
-
-      // Priorizar fotos locales si tienen más contenido
-      let fotos = fotosNube;
-      let foto  = fotosNube[0] || '';
-
-      if (local && local.fotos.length >= fotosNube.length) {
-        fotos = local.fotos;
-        foto  = local.foto || local.fotos[0] || '';
-      }
-
-      return {
-        folio:            r.folio,
-        supervisor:       r.supervisor || '—',
-        area:             r.area,
-        tipo:             r.tipo,
-        nivel:            r.nivel,
-        fecha:            r.fecha,
-        hora:             r.hora,
-        estatus:          r.estatus,
-        fechaAperturaISO: r.fecha_apertura,
-        fechaCierreISO:   r.fecha_cierre || null,
-        diasLimite:       r.dias_limite,
-        notas:            r.notas || '',
-        proyecto:         r.proyecto || '',
-        departamento:     r.departamento || '',
-        fotos,
-        foto
-      };
-    });
+    registros = [
+      ...data.map(r => {
+        const local = fotosLocales[r.folio];
+        const fotos = local ? local.fotos : (r.fotos || []);
+        const foto  = local ? local.foto  : (fotos[0] || '');
+        return {
+          folio:            r.folio,
+          supervisor:       r.supervisor || '—',
+          area:             r.area,
+          tipo:             r.tipo,
+          nivel:            r.nivel,
+          fecha:            r.fecha,
+          hora:             r.hora,
+          estatus:          r.estatus,
+          fechaAperturaISO: r.fecha_apertura,
+          fechaCierreISO:   r.fecha_cierre || null,
+          diasLimite:       r.dias_limite,
+          notas:            r.notas || '',
+          proyecto:         r.proyecto || '',
+          departamento:     r.departamento || '',
+          fotos,
+          foto
+        };
+      }),
+      ...soloLocales
+    ];
 
     // Actualizar folio counter
     const maxNum = registros.reduce((max, r) => {
@@ -1050,8 +1027,22 @@ function verDetalle(folio) {
         <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.5);color:white;font-size:11px;padding:3px 8px;border-radius:10px;backdrop-filter:blur(4px)"><i class="bi bi-zoom-in"></i></div>
       </div>
     `).join('');
+    fotosBody.innerHTML += `
+      <input type="file" id="agregarFotoInput" accept="image/*" style="display:none" onchange="agregarFotoOA(this)">
+      <button onclick="document.getElementById('agregarFotoInput').click()" style="width:100%;margin-top:8px;padding:10px;border:2px dashed var(--border);border-radius:10px;background:var(--light);color:var(--mid);font-size:13px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">
+        <i class="bi bi-plus-lg"></i> Agregar foto
+      </button>`;
   } else {
-    fotoCard.style.display='none';
+    fotoCard.style.display='block';
+    fotosBody.innerHTML = `
+      <div style="text-align:center;padding:24px 16px;border:2px dashed var(--border);border-radius:12px;background:var(--light)">
+        <div style="font-size:32px;margin-bottom:8px;color:var(--mid)"><i class="bi bi-camera"></i></div>
+        <div style="font-size:13px;color:var(--mid);margin-bottom:16px">Sin evidencia fotográfica</div>
+        <input type="file" id="agregarFotoInput" accept="image/*" style="display:none" onchange="agregarFotoOA(this)">
+        <button onclick="document.getElementById('agregarFotoInput').click()" style="padding:10px 24px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif">
+          <i class="bi bi-camera-fill"></i> Agregar foto
+        </button>
+      </div>`;
   }
 
   const dot = document.getElementById('detalleDot');
@@ -1065,6 +1056,32 @@ function verDetalle(folio) {
   document.getElementById('btnEstatusCerrada').classList.toggle('active', r.estatus==='cerrada');
 
   goTo('screenPasados','screenDetalle');
+}
+
+function agregarFotoOA(input) {
+  if (!input.files || !input.files[0] || !currentDetalle) return;
+  const reg = registros.find(r => r.folio === currentDetalle.folio);
+  if (!reg) return;
+
+  const reader = new FileReader();
+  reader.onload = async e => {
+    const base64 = e.target.result;
+    if (!reg.fotos) reg.fotos = [];
+    reg.fotos.push(base64);
+    reg.foto = reg.fotos[0];
+
+    guardarEnStorage();
+    showToast('<i class="bi bi-camera-fill"></i> Foto agregada — sincronizando...');
+
+    // Sincronizar con Supabase (sube la foto y actualiza)
+    await sincronizarOA(reg);
+    sincronizarSheets();
+    showToast('<i class="bi bi-cloud-check-fill"></i> Foto guardada correctamente');
+
+    // Refrescar la vista de detalle
+    verDetalle(reg.folio);
+  };
+  reader.readAsDataURL(input.files[0]);
 }
 
 function selEstatus(est, el) {
