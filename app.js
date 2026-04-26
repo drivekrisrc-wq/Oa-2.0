@@ -281,13 +281,17 @@ async function subirFoto(base64, folio, idx) {
 
 // Sincronizar una OA a Supabase (upsert)
 async function sincronizarOA(r) {
-  // Subir fotos que sean base64 y reemplazar por URLs
-  const fotosUrls = await Promise.all(
-    (r.fotos || []).map((f, i) =>
-      f && f.startsWith('data:image') ? subirFoto(f, r.folio, i) : Promise.resolve(f)
-    )
+  // Subir solo las fotos que sean base64, conservar las que ya son URLs
+  const fotosResultantes = await Promise.all(
+    (r.fotos || []).map((f, i) => {
+      if (!f || f.length === 0) return Promise.resolve(null);
+      if (f.startsWith('data:image')) return subirFoto(f, r.folio, i);
+      // Ya es URL — verificar que pertenece a este folio
+      if (f.includes('/fotos-oa/')) return Promise.resolve(f);
+      return Promise.resolve(null);
+    })
   );
-  const fotoUrlFiltradas = fotosUrls.filter(Boolean);
+  const fotosFinales = fotosResultantes.filter(Boolean);
 
   const payload = {
     folio:          r.folio,
@@ -304,7 +308,7 @@ async function sincronizarOA(r) {
     notas:          r.notas || '',
     proyecto:       r.proyecto || '',
     departamento:   r.departamento || '',
-    fotos:          fotoUrlFiltradas
+    fotos:          fotosFinales
   };
 
   const resp = await fetch(`${SB_URL}/rest/v1/oas?folio=eq.${encodeURIComponent(r.folio)}`, {
@@ -327,10 +331,11 @@ async function sincronizarOA(r) {
     });
   }
 
-  // Actualizar URLs en el registro local
-  if (fotoUrlFiltradas.length > 0) {
-    r.fotos = fotoUrlFiltradas;
-    r.foto  = fotoUrlFiltradas[0];
+  // Actualizar URLs en el registro local si se subieron fotos nuevas
+  const hayBase64 = (r.fotos || []).some(f => f && f.startsWith('data:image'));
+  if (hayBase64 && fotosFinales.length > 0) {
+    r.fotos = fotosFinales;
+    r.foto  = fotosFinales[0];
     guardarEnStorage();
   }
 }
@@ -361,44 +366,62 @@ async function cargarDesdeNube() {
     );
     if (!resp.ok) { mostrarSyncStatus('offline'); return false; }
     const data = await resp.json();
-    if (!data || data.length === 0) { mostrarSyncStatus('ok'); return false; }
 
-    // Mapa de fotos locales base64 para no perderlas
+    // Mapa de fotos locales — guardar TODAS (base64 Y URLs) por folio
     const fotosLocales = {};
     registros.forEach(r => {
-      const b64 = (r.fotos || []).filter(f => f && f.startsWith('data:image'));
-      if (b64.length) fotosLocales[r.folio] = { fotos: r.fotos, foto: r.foto };
+      const fotos = (r.fotos || []).filter(f => f && f.length > 0);
+      if (fotos.length || r.foto) {
+        fotosLocales[r.folio] = { fotos, foto: r.foto || '' };
+      }
     });
 
-    const foliosNube = new Set(data.map(r => r.folio));
-    const soloLocales = registros.filter(r => !foliosNube.has(r.folio));
+    if (!data || data.length === 0) {
+      // Si Supabase devuelve vacío, limpiar registros locales también
+      registros = [];
+      guardarEnStorage();
+      updateStats();
+      mostrarSyncStatus('ok');
+      return false;
+    }
 
-    registros = [
-      ...data.map(r => {
-        const local = fotosLocales[r.folio];
-        const fotos = local ? local.fotos : (r.fotos || []);
-        const foto  = local ? local.foto  : (fotos[0] || '');
-        return {
-          folio:            r.folio,
-          supervisor:       r.supervisor || '—',
-          area:             r.area,
-          tipo:             r.tipo,
-          nivel:            r.nivel,
-          fecha:            r.fecha,
-          hora:             r.hora,
-          estatus:          r.estatus,
-          fechaAperturaISO: r.fecha_apertura,
-          fechaCierreISO:   r.fecha_cierre || null,
-          diasLimite:       r.dias_limite,
-          notas:            r.notas || '',
-          proyecto:         r.proyecto || '',
-          departamento:     r.departamento || '',
-          fotos,
-          foto
-        };
-      }),
-      ...soloLocales
-    ];
+    // Supabase es la fuente de verdad — solo usar lo que viene de la nube
+    // NO agregar soloLocales porque eso incluye OAs ya eliminadas
+    const foliosNube = new Set(data.map(r => r.folio));
+
+    registros = data.map(r => {
+      // Restaurar fotos desde local si existen (pueden ser base64 o URLs)
+      const local = fotosLocales[r.fotosLocales] || fotosLocales[r.folio];
+      const fotosNube = (r.fotos || []).filter(f => f && f.length > 0);
+
+      // Priorizar fotos locales si tienen más contenido
+      let fotos = fotosNube;
+      let foto  = fotosNube[0] || '';
+
+      if (local && local.fotos.length >= fotosNube.length) {
+        fotos = local.fotos;
+        foto  = local.foto || local.fotos[0] || '';
+      }
+
+      return {
+        folio:            r.folio,
+        supervisor:       r.supervisor || '—',
+        area:             r.area,
+        tipo:             r.tipo,
+        nivel:            r.nivel,
+        fecha:            r.fecha,
+        hora:             r.hora,
+        estatus:          r.estatus,
+        fechaAperturaISO: r.fecha_apertura,
+        fechaCierreISO:   r.fecha_cierre || null,
+        diasLimite:       r.dias_limite,
+        notas:            r.notas || '',
+        proyecto:         r.proyecto || '',
+        departamento:     r.departamento || '',
+        fotos,
+        foto
+      };
+    });
 
     // Actualizar folio counter
     const maxNum = registros.reduce((max, r) => {
