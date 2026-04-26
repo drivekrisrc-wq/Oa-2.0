@@ -1225,6 +1225,9 @@ function generarPDF() {
           <div style="font-size:9px;color:#9CA3AF;font-family:Arial">
             Generado: ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}
           </div>
+          <div style="font-size:9px;color:#6B7280;font-family:Arial;margin-top:4px;font-style:italic">
+            Cualquier duda o comentario, comunicarse con el número de Protección Ambiental: 2295489455
+          </div>
         </div>
 
       </div>
