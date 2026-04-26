@@ -129,6 +129,19 @@ function abrirEditar() {
     const deptoEl = document.getElementById('editDeptoInput');
     if (deptoEl) deptoEl.value = r.departamento || '';
 
+    // Precargar foto de vista previa
+    const previewImg   = document.getElementById('editFotoPreviewImg');
+    const previewEmpty = document.getElementById('editFotoPreviewEmpty');
+    const primeraFoto  = (r.fotos && r.fotos[0]) || r.foto || '';
+    if (primeraFoto) {
+      previewImg.src = primeraFoto;
+      previewImg.style.display = 'block';
+      if (previewEmpty) previewEmpty.style.display = 'none';
+    } else {
+      previewImg.style.display = 'none';
+      if (previewEmpty) previewEmpty.style.display = 'block';
+    }
+
     // Marcar área
     document.querySelectorAll('#editAreaList .area-list-item').forEach(el => {
       const name = el.querySelector('.ali-name')?.textContent;
@@ -177,6 +190,23 @@ function filterEditAreas(q) {
   });
 }
 
+function onEditFotoPreviewChange(input) {
+  if (!input.files || !input.files[0] || !currentDetalle) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const base64 = e.target.result;
+    // Actualizar preview visual
+    const previewImg   = document.getElementById('editFotoPreviewImg');
+    const previewEmpty = document.getElementById('editFotoPreviewEmpty');
+    previewImg.src = base64;
+    previewImg.style.display = 'block';
+    if (previewEmpty) previewEmpty.style.display = 'none';
+    // Guardar en editState para que guardarEdicion la use
+    editState.fotoPreview = base64;
+  };
+  reader.readAsDataURL(input.files[0]);
+}
+
 function guardarEdicion() {
   if (!currentDetalle) return;
   const reg = registros.find(r => r.folio === currentDetalle.folio);
@@ -217,6 +247,14 @@ function guardarEdicion() {
     reg.diasLimite = prio.diasLimite;
   }
   reg.notas = notasVal;
+
+  // Si se cambió la foto de vista previa, ponerla como primera foto
+  if (editState.fotoPreview) {
+    if (!reg.fotos) reg.fotos = [];
+    reg.fotos[0] = editState.fotoPreview;
+    reg.foto = editState.fotoPreview;
+    editState.fotoPreview = null;
+  }
 
   guardarEnStorage();
   sincronizarNube();
@@ -1027,22 +1065,8 @@ function verDetalle(folio) {
         <div style="position:absolute;bottom:8px;right:8px;background:rgba(0,0,0,0.5);color:white;font-size:11px;padding:3px 8px;border-radius:10px;backdrop-filter:blur(4px)"><i class="bi bi-zoom-in"></i></div>
       </div>
     `).join('');
-    fotosBody.innerHTML += `
-      <input type="file" id="agregarFotoInput" accept="image/*" style="display:none" onchange="agregarFotoOA(this)">
-      <button onclick="document.getElementById('agregarFotoInput').click()" style="width:100%;margin-top:8px;padding:10px;border:2px dashed var(--border);border-radius:10px;background:var(--light);color:var(--mid);font-size:13px;font-weight:600;cursor:pointer;font-family:'Barlow',sans-serif">
-        <i class="bi bi-plus-lg"></i> Agregar foto
-      </button>`;
   } else {
-    fotoCard.style.display='block';
-    fotosBody.innerHTML = `
-      <div style="text-align:center;padding:24px 16px;border:2px dashed var(--border);border-radius:12px;background:var(--light)">
-        <div style="font-size:32px;margin-bottom:8px;color:var(--mid)"><i class="bi bi-camera"></i></div>
-        <div style="font-size:13px;color:var(--mid);margin-bottom:16px">Sin evidencia fotográfica</div>
-        <input type="file" id="agregarFotoInput" accept="image/*" style="display:none" onchange="agregarFotoOA(this)">
-        <button onclick="document.getElementById('agregarFotoInput').click()" style="padding:10px 24px;background:var(--navy);color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif">
-          <i class="bi bi-camera-fill"></i> Agregar foto
-        </button>
-      </div>`;
+    fotoCard.style.display='none';
   }
 
   const dot = document.getElementById('detalleDot');
@@ -1056,32 +1080,6 @@ function verDetalle(folio) {
   document.getElementById('btnEstatusCerrada').classList.toggle('active', r.estatus==='cerrada');
 
   goTo('screenPasados','screenDetalle');
-}
-
-function agregarFotoOA(input) {
-  if (!input.files || !input.files[0] || !currentDetalle) return;
-  const reg = registros.find(r => r.folio === currentDetalle.folio);
-  if (!reg) return;
-
-  const reader = new FileReader();
-  reader.onload = async e => {
-    const base64 = e.target.result;
-    if (!reg.fotos) reg.fotos = [];
-    reg.fotos.push(base64);
-    reg.foto = reg.fotos[0];
-
-    guardarEnStorage();
-    showToast('<i class="bi bi-camera-fill"></i> Foto agregada — sincronizando...');
-
-    // Sincronizar con Supabase (sube la foto y actualiza)
-    await sincronizarOA(reg);
-    sincronizarSheets();
-    showToast('<i class="bi bi-cloud-check-fill"></i> Foto guardada correctamente');
-
-    // Refrescar la vista de detalle
-    verDetalle(reg.folio);
-  };
-  reader.readAsDataURL(input.files[0]);
 }
 
 function selEstatus(est, el) {
@@ -1224,9 +1222,6 @@ function generarPDF() {
           </div>
           <div style="font-size:9px;color:#9CA3AF;font-family:Arial">
             Generado: ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}
-          </div>
-          <div style="font-size:9px;color:#6B7280;font-family:Arial;margin-top:4px;font-style:italic">
-            Cualquier duda o comentario, comunicarse con el número de Protección Ambiental: 2295489455
           </div>
         </div>
 

@@ -262,16 +262,8 @@
               <div class="area-list" id="editAreaList">
                 <div class="area-group-label">Diques y Muelles</div>
                 <div class="area-list-item" onclick="selEditArea(this,'Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 2 Babor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Babor Proa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 2 Estribor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Estribor Proa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 2 Babor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Babor Popa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 2 Estribor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Estribor Popa</span></div>
                 <div class="area-list-item" onclick="selEditArea(this,'Plan de Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 2</span></div>
                 <div class="area-list-item" onclick="selEditArea(this,'Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 5 Babor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Babor Proa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 5 Estribor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Estribor Proa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 5 Babor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Babor Popa</span></div>
-                <div class="area-list-item" onclick="selEditArea(this,'Dique 5 Estribor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Estribor Popa</span></div>
                 <div class="area-list-item" onclick="selEditArea(this,'Muelle de Reparaciones')"><span class="ali-icon"><i class="fa-solid fa-gear" style="color:#002b66"></i></span><span class="ali-name">Muelle de Reparaciones</span></div>
                 <div class="area-list-item" onclick="selEditArea(this,'Plan de Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 5</span></div>
                 <div class="area-list-item" onclick="selEditArea(this,'Muelle de Alistamiento')"><span class="ali-icon"><i class="fa-solid fa-ship" style="color:#002b66"></i></span><span class="ali-name">Muelle de Alistamiento</span></div>
@@ -323,6 +315,24 @@
                 <div class="inc-item" onclick="selEditInc(this,'Contaminación al Suelo — DERRAME')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-droplet-fill" style="color:#002b66"></i></div><div class="inc-text">Contaminación al Suelo — DERRAME</div></div>
                 <div class="inc-item" onclick="selEditInc(this,'Agotamiento de Recursos — FUGA')"><div class="inc-radio"></div><div class="inc-emoji"><i class="bi bi-wind" style="color:#002b66"></i></div><div class="inc-text">Agotamiento de Recursos — FUGA</div></div>
               </div>
+            </div>
+          </div>
+
+          <!-- Foto vista previa -->
+          <div class="fcard" id="efc_foto">
+            <div class="fcard-head">
+              <div class="fcard-icon blue"><i class="bi bi-camera-fill"></i></div>
+              <div class="fcard-title">Foto de Vista Previa</div>
+            </div>
+            <div class="fcard-body">
+              <div id="editFotoPreviewWrap" style="position:relative;border-radius:12px;overflow:hidden;background:var(--light);border:1.5px solid var(--border);margin-bottom:10px;min-height:80px;display:flex;align-items:center;justify-content:center;">
+                <img id="editFotoPreviewImg" src="" style="width:100%;max-height:200px;object-fit:contain;display:none;border-radius:10px">
+                <div id="editFotoPreviewEmpty" style="padding:20px;text-align:center;color:var(--mid)"><i class="bi bi-image" style="font-size:28px"></i><div style="font-size:12px;margin-top:6px">Sin foto de vista previa</div></div>
+              </div>
+              <input type="file" id="editFotoPreviewInput" accept="image/*" style="display:none" onchange="onEditFotoPreviewChange(this)">
+              <button onclick="document.getElementById('editFotoPreviewInput').click()" style="width:100%;padding:10px;border:1.5px solid var(--blue);border-radius:10px;background:rgba(0,155,222,0.06);color:var(--blue);font-size:13px;font-weight:700;cursor:pointer;font-family:'Barlow',sans-serif;display:flex;align-items:center;justify-content:center;gap:6px">
+                <i class="bi bi-camera-fill"></i> Cambiar foto de vista previa
+              </button>
             </div>
           </div>
 
@@ -467,16 +477,8 @@
               <div class="area-list" id="areaList">
                 <div class="area-group-label">Diques y Muelles</div>
                 <div class="area-list-item" onclick="selArea(this,'Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></i></span><span class="ali-name">Dique 2</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 2 Babor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Babor Proa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 2 Estribor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Estribor Proa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 2 Babor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Babor Popa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 2 Estribor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 2 Estribor Popa</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Plan de Dique 2')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 2</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 5 Babor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Babor Proa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 5 Estribor Proa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Estribor Proa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 5 Babor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Babor Popa</span></div>
-                <div class="area-list-item" onclick="selArea(this,'Dique 5 Estribor Popa')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Dique 5 Estribor Popa</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Muelle de Reparaciones')"><span class="ali-icon"><i class="fa-solid fa-gear" style="color:#002b66"></i></span><span class="ali-name">Muelle de Reparaciones</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Plan de Dique 5')"><span class="ali-icon"><i class="fa-solid fa-anchor" style="color:#002b66"></i></span><span class="ali-name">Plan de Dique 5</span></div>
                 <div class="area-list-item" onclick="selArea(this,'Muelle de Alistamiento')"><span class="ali-icon"><i class="fa-solid fa-ship" style="color:#002b66"></i></span><span class="ali-name">Muelle de Alistamiento</span></div>
