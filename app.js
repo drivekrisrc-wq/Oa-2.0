@@ -1216,12 +1216,17 @@ function generarPDF() {
         </table>
 
         <!-- Pie de página -->
-        <div style="border-top:1px solid #dde3ee;padding-top:12px;display:flex;justify-content:space-between;align-items:center">
-          <div style="font-size:9px;color:#2B7EC1;font-weight:700;letter-spacing:0.5px;font-family:Arial">
-            HUTCHISON PORTS TNG | OBSERVACIÓN AMBIENTAL
+        <div style="border-top:1px solid #dde3ee;padding-top:12px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <div style="font-size:9px;color:#2B7EC1;font-weight:700;letter-spacing:0.5px;font-family:Arial">
+              HUTCHISON PORTS TNG | OBSERVACIÓN AMBIENTAL
+            </div>
+            <div style="font-size:9px;color:#9CA3AF;font-family:Arial">
+              Generado: ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}
+            </div>
           </div>
-          <div style="font-size:9px;color:#9CA3AF;font-family:Arial">
-            Generado: ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}
+          <div style="font-size:9px;color:#6B7280;font-family:Arial;font-style:italic;text-align:center;padding-top:6px;border-top:1px dashed #eef0f4">
+            Cualquier duda o comentario, comunicarse con el número de Protección Ambiental: 2295489455
           </div>
         </div>
 
