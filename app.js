@@ -96,11 +96,20 @@ function selResponsable(siglas) {
   // Mostrar badge del supervisor en el topbar
   const sub = document.getElementById('nuevoFolioSub');
   if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
-  // Inicializar campo folio con el siguiente número automático
+  // Prellenar campo folio con el siguiente número automático
   setTimeout(() => {
     const fi = document.getElementById('folioInput');
-    if (fi && !fi.value) {
-      fi.placeholder = String(folioCounter).padStart(4,'0');
+    if (fi) {
+      // Calcular el máximo folio existente para garantizar el siguiente correcto
+      const maxExistente = registros.reduce((max, r) => {
+        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
+        return n > max ? n : max;
+      }, 0);
+      const siguiente = Math.max(folioCounter, maxExistente + 1);
+      fi.value = String(siguiente).padStart(4,'0');
+      fi.placeholder = String(siguiente).padStart(4,'0');
+      // Actualizar folioCounter si hace falta
+      if (siguiente > folioCounter) folioCounter = siguiente;
     }
   }, 100);
 }
@@ -588,6 +597,14 @@ function cargarDeStorage() {
       });
     }
     if (folio) folioCounter = parseInt(folio);
+    // Asegurar que folioCounter siempre sea mayor al máximo existente
+    if (registros.length > 0) {
+      const maxExistente = registros.reduce((max, r) => {
+        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
+        return n > max ? n : max;
+      }, 0);
+      if (maxExistente >= folioCounter) folioCounter = maxExistente + 1;
+    }
   } catch(e) {
     console.warn('Error al leer localStorage:', e);
   }
