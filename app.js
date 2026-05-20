@@ -93,23 +93,25 @@ function selResponsable(siglas) {
   supervisorActual = siglas;
   showToast('<i class="bi bi-person-check-fill"></i> Supervisor: ' + siglas);
   goTo('screenResponsable', 'screenNuevo');
-  // Mostrar badge del supervisor en el topbar
+
+  // Calcular el siguiente folio correcto basado en los registros existentes
+  const maxExistente = registros.reduce((max, r) => {
+    const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
+    return n > max ? n : max;
+  }, 0);
+  const siguiente = Math.max(folioCounter, maxExistente + 1);
+  if (siguiente > folioCounter) folioCounter = siguiente;
+
+  // Actualizar topbar con folio y supervisor
   const sub = document.getElementById('nuevoFolioSub');
-  if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
-  // Prellenar campo folio con el siguiente número automático
+  if (sub) sub.textContent = 'OA-' + String(siguiente).padStart(4,'0') + ' · ' + siglas;
+
+  // Prellenar el campo folio automáticamente
   setTimeout(() => {
     const fi = document.getElementById('folioInput');
     if (fi) {
-      // Calcular el máximo folio existente para garantizar el siguiente correcto
-      const maxExistente = registros.reduce((max, r) => {
-        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
-        return n > max ? n : max;
-      }, 0);
-      const siguiente = Math.max(folioCounter, maxExistente + 1);
       fi.value = String(siguiente).padStart(4,'0');
       fi.placeholder = String(siguiente).padStart(4,'0');
-      // Actualizar folioCounter si hace falta
-      if (siguiente > folioCounter) folioCounter = siguiente;
     }
   }, 100);
 }
@@ -597,13 +599,23 @@ function cargarDeStorage() {
       });
     }
     if (folio) folioCounter = parseInt(folio);
-    // Asegurar que folioCounter siempre sea mayor al máximo existente
+    // Siempre recalcular desde los registros reales para evitar contadores corruptos
     if (registros.length > 0) {
       const maxExistente = registros.reduce((max, r) => {
         const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
         return n > max ? n : max;
       }, 0);
+      // Solo usar el máximo de registros si es mayor (nunca retroceder)
       if (maxExistente >= folioCounter) folioCounter = maxExistente + 1;
+    }
+    // Sanidad: si folioCounter es absurdamente grande (corrupto), recalcular solo desde registros
+    if (folioCounter > 99999 || isNaN(folioCounter)) {
+      const maxExistente = registros.reduce((max, r) => {
+        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
+        return n > max ? n : max;
+      }, 92); // fallback a 92 que es el último conocido
+      folioCounter = maxExistente + 1;
+      localStorage.setItem(FOLIO_KEY, String(folioCounter));
     }
   } catch(e) {
     console.warn('Error al leer localStorage:', e);
