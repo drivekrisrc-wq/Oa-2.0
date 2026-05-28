@@ -93,25 +93,14 @@ function selResponsable(siglas) {
   supervisorActual = siglas;
   showToast('<i class="bi bi-person-check-fill"></i> Supervisor: ' + siglas);
   goTo('screenResponsable', 'screenNuevo');
-
-  // Calcular el siguiente folio correcto basado en los registros existentes
-  const maxExistente = registros.reduce((max, r) => {
-    const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
-    return n > max ? n : max;
-  }, 0);
-  const siguiente = Math.max(folioCounter, maxExistente + 1);
-  if (siguiente > folioCounter) folioCounter = siguiente;
-
-  // Actualizar topbar con folio y supervisor
+  // Mostrar badge del supervisor en el topbar
   const sub = document.getElementById('nuevoFolioSub');
-  if (sub) sub.textContent = 'OA-' + String(siguiente).padStart(4,'0') + ' · ' + siglas;
-
-  // Prellenar el campo folio automáticamente
+  if (sub) sub.textContent = (sub.textContent.split('·')[0]).trim() + ' · ' + siglas;
+  // Inicializar campo folio con el siguiente número automático
   setTimeout(() => {
     const fi = document.getElementById('folioInput');
-    if (fi) {
-      fi.value = String(siguiente).padStart(4,'0');
-      fi.placeholder = String(siguiente).padStart(4,'0');
+    if (fi && !fi.value) {
+      fi.placeholder = String(folioCounter).padStart(4,'0');
     }
   }, 100);
 }
@@ -599,24 +588,6 @@ function cargarDeStorage() {
       });
     }
     if (folio) folioCounter = parseInt(folio);
-    // Siempre recalcular desde los registros reales para evitar contadores corruptos
-    if (registros.length > 0) {
-      const maxExistente = registros.reduce((max, r) => {
-        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
-        return n > max ? n : max;
-      }, 0);
-      // Solo usar el máximo de registros si es mayor (nunca retroceder)
-      if (maxExistente >= folioCounter) folioCounter = maxExistente + 1;
-    }
-    // Sanidad: si folioCounter es absurdamente grande (corrupto), recalcular solo desde registros
-    if (folioCounter > 99999 || isNaN(folioCounter)) {
-      const maxExistente = registros.reduce((max, r) => {
-        const n = parseInt((r.folio || '').replace(/\D/g,'')) || 0;
-        return n > max ? n : max;
-      }, 92); // fallback a 92 que es el último conocido
-      folioCounter = maxExistente + 1;
-      localStorage.setItem(FOLIO_KEY, String(folioCounter));
-    }
   } catch(e) {
     console.warn('Error al leer localStorage:', e);
   }
@@ -628,6 +599,7 @@ let folioCounter = 1;
 let currentDetalle = null;
 let nuevoEstatus = null;
 let filterActual = 'todos';
+let filterAreaActual = '';
 
 // Cargar datos guardados al iniciar
 cargarDeStorage();
@@ -923,14 +895,33 @@ function updateStats() {
 // =================== REGISTROS PASADOS ===================
 function renderRegistros() {
   const lista = document.getElementById('registrosList');
-  const filtrados = filterActual==='todos' ? registros : registros.filter(r=>r.estatus===filterActual);
-  document.getElementById('pasadosSub').textContent = filtrados.length + ' observaciones';
+
+  // Aplicar filtro de estatus
+  let filtrados = filterActual === 'todos' ? registros : registros.filter(r => r.estatus === filterActual);
+
+  // Aplicar filtro de área
+  if (filterAreaActual) {
+    filtrados = filtrados.filter(r => r.area === filterAreaActual);
+  }
+
+  // Poblar dropdown de áreas con las que existen en el filtro de estatus actual
+  const areaSelect = document.getElementById('areaFilter');
+  if (areaSelect) {
+    const baseParaAreas = filterActual === 'todos' ? registros : registros.filter(r => r.estatus === filterActual);
+    const areasUnicas = [...new Set(baseParaAreas.map(r => r.area).filter(Boolean))].sort();
+    const valorActual = areaSelect.value;
+    areaSelect.innerHTML = '<option value="">📍 Todas las áreas</option>' +
+      areasUnicas.map(a => `<option value="${a}" ${a === valorActual ? 'selected' : ''}>${a}</option>`).join('');
+  }
+
+  document.getElementById('pasadosSub').textContent = filtrados.length + ' observaciones' +
+    (filterAreaActual ? ` · ${filterAreaActual}` : '');
 
   lista.innerHTML = filtrados.length === 0
     ? `<div style="text-align:center;padding:50px 20px;color:var(--mid)">
         <div style="font-size:48px;margin-bottom:12px"><i class="bi bi-card-text"></i></div>
         <div style="font-family:'Barlow Condensed',sans-serif;font-size:18px;font-weight:700;color:var(--text);margin-bottom:6px">Sin registros</div>
-        <div style="font-size:13px">Aún no hay OAs registradas</div>
+        <div style="font-size:13px">${filterAreaActual ? 'No hay OAs en esta área' : 'Aún no hay OAs registradas'}</div>
       </div>`
     : filtrados.map((r) => {
       const prio = getPrioridad(r.tipo);
@@ -1010,8 +1001,16 @@ function eliminarOA(folio) {
 
 function filterReg(tipo, el) {
   filterActual = tipo;
+  filterAreaActual = ''; // Resetear filtro de área al cambiar de tab
+  const sel = document.getElementById('areaFilter');
+  if (sel) sel.value = '';
   document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
   el.classList.add('active');
+  renderRegistros();
+}
+
+function filterArea(area) {
+  filterAreaActual = area;
   renderRegistros();
 }
 

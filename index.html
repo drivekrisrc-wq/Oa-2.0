@@ -665,6 +665,20 @@
             <div class="filter-btn closed-f" onclick="filterReg('cerrada',this)"><i class="bi bi-circle-fill"></i> Cerradas</div>
           </div>
 
+          <!-- Filtro por área -->
+          <div style="padding:0 16px 10px;">
+            <div style="position:relative;">
+              <select id="areaFilter" onchange="filterArea(this.value)"
+                style="width:100%;padding:9px 36px 9px 12px;border:1.5px solid var(--border);border-radius:10px;
+                       background:var(--light);font-family:'Barlow',sans-serif;font-size:13px;font-weight:600;
+                       color:var(--navy);outline:none;appearance:none;-webkit-appearance:none;cursor:pointer;">
+                <option value="">📍 Todas las áreas</option>
+              </select>
+              <i class="bi bi-chevron-down" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);
+                 color:var(--mid);font-size:12px;pointer-events:none;"></i>
+            </div>
+          </div>
+
           <div class="registros-list" id="registrosList"></div>
       </div>
     </template>
