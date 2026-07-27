@@ -271,6 +271,7 @@ function guardarEdicion() {
 // =================== SUPABASE ===================
 const SB_URL  = 'https://rbvoxtqvcavapxwjwmaf.supabase.co';
 const SB_KEY  = 'sb_publishable_SBYEEhjW06rB_qr-jDPt3Q_HLisHjtk';
+const SB_KEY_LEGACY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJidm94dHF2Y2F2YXB4d2p3bWFmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ3NDE4OTksImV4cCI6MjA5MDMxNzg5OX0.UXkCBspcpTPIenxzyT2saph84gAll_KeRd83kBINpyM';
 const SYNC_KEY = 'tng_last_sync';
 let sincronizando = false;
 
@@ -295,8 +296,8 @@ async function subirFoto(base64, folio, idx) {
     const resp = await fetch(`${SB_URL}/storage/v1/object/fotos-oa/${path}`, {
       method: 'POST',
       headers: {
-        'apikey': SB_KEY,
-        'Authorization': 'Bearer ' + SB_KEY,
+        'apikey': SB_KEY_LEGACY,
+        'Authorization': 'Bearer ' + SB_KEY_LEGACY,
         'Content-Type': blob.type,
         'x-upsert': 'true',
         'cache-control': '3600'
