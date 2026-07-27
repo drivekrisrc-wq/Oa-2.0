@@ -552,20 +552,19 @@ function comprimirFoto(base64, calidad = 0.4) {
 
 async function guardarEnStorage() {
   try {
-    const comprimidos = await Promise.all(registros.map(async r => {
-      const fotos = await Promise.all((r.fotos || []).map(f => comprimirFoto(f)));
-      const foto  = await comprimirFoto(r.foto);
-      return { ...r, fotos, foto };
+    // Guardar sin fotos base64 — solo URLs de Supabase para no llenar el localStorage
+    const sinBase64 = registros.map(r => ({
+      ...r,
+      fotos: (r.fotos || []).map(f => (f && f.startsWith('data:image')) ? '' : f).filter(Boolean),
+      foto:  (r.foto && r.foto.startsWith('data:image')) ? '' : (r.foto || '')
     }));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(comprimidos));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(sinBase64));
     localStorage.setItem(FOLIO_KEY, String(folioCounter));
   } catch(e) {
-    // Si aún así está lleno, guardar sin fotos
     try {
       const sinFotos = registros.map(r => ({ ...r, fotos: [], foto: '' }));
       localStorage.setItem(STORAGE_KEY, JSON.stringify(sinFotos));
       localStorage.setItem(FOLIO_KEY, String(folioCounter));
-      showToast('<i class="bi bi-exclamation-triangle-fill"></i> Registros guardados sin fotos (memoria llena)');
     } catch(e2) {
       showToast('<i class="bi bi-exclamation-triangle-fill"></i> No se pudo guardar. Memoria del dispositivo llena.');
     }
